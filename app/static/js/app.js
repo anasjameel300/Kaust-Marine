@@ -53,7 +53,11 @@ const viewStatus = document.getElementById('viewStatus');
 
 const confSlider = document.getElementById('confSlider');
 const confValue = document.getElementById('confValue');
+const modelSelect = document.getElementById('modelSelect');
+const modelStatusBadge = document.getElementById('modelStatusBadge');
+const subBrandModel = document.getElementById('subBrandModel');
 const showFish = document.getElementById('showFish');
+
 const showReefs = document.getElementById('showReefs');
 const showDivers = document.getElementById('showDivers');
 
@@ -88,6 +92,11 @@ function setupEventListeners() {
     confValue.textContent = parseFloat(e.target.value).toFixed(2);
   });
   confSlider.addEventListener('change', () => runSegmentation());
+
+  if (modelSelect) {
+    modelSelect.addEventListener('change', () => runSegmentation());
+  }
+
 
   // Filter Toggles
   showFish.addEventListener('change', (e) => { state.filters.fish = e.target.checked; render(); updateSidebar(); });
@@ -199,6 +208,9 @@ async function runSegmentation() {
       formData.append('sample_name', state.currentSampleName);
     }
     formData.append('conf_threshold', confSlider.value);
+    if (modelSelect) {
+      formData.append('model_version', modelSelect.value);
+    }
 
     const res = await fetch('/api/segment', {
       method: 'POST',
@@ -210,6 +222,13 @@ async function runSegmentation() {
     const data = await res.json();
     const elapsed = Math.round(performance.now() - startTime);
 
+    if (data.model_title && modelStatusBadge) {
+      modelStatusBadge.textContent = data.model_title;
+    }
+    if (subBrandModel && data.model_version) {
+      subBrandModel.textContent = `YOLO11s-seg (${data.model_version === 'finetuned' ? 'Stage 2 Fine-Tuned (73.4% Prec)' : 'Stage 1 Baseline'})`;
+    }
+
     state.detections = data.detections || [];
     state.counts = data.counts || { fish: 0, reefs: 0, human_divers: 0 };
     latencyVal.textContent = `${elapsed} ms`;
@@ -218,10 +237,11 @@ async function runSegmentation() {
     reefCountVal.textContent = state.counts.reefs || 0;
     diverCountVal.textContent = state.counts.human_divers || 0;
 
-    viewStatus.textContent = `Completed: ${state.detections.length} total segments identified`;
+    viewStatus.textContent = `Completed (${data.model_version === 'finetuned' ? 'Fine-Tuned' : 'Baseline'}): ${state.detections.length} total segments identified`;
 
     render();
     updateSidebar();
+
 
   } catch (err) {
     console.error(err);

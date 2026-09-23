@@ -23,21 +23,34 @@ app.add_middleware(
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent
-WEIGHTS_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_v2" / "weights" / "best.pt"
+FINETUNED_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_finetune_v1" / "weights" / "best.pt"
+BASELINE_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_v2" / "weights" / "best.pt"
+
+# Default to the newly fine-tuned model (73.4% precision)
+WEIGHTS_PATH = FINETUNED_PATH if FINETUNED_PATH.exists() else BASELINE_PATH
 
 if not WEIGHTS_PATH.exists():
     raise FileNotFoundError(f"Model weights not found at {WEIGHTS_PATH}")
 
 # Device selection: use GPU if available
 device = 0 if torch.cuda.is_available() else "cpu"
-print(f"[Server] Loading custom trained model: {WEIGHTS_PATH} on device={device}...")
+print(f"[Server] Loading fine-tuned model: {WEIGHTS_PATH} on device={device}...")
 model = YOLO(str(WEIGHTS_PATH))
 print(f"[Server] Model loaded successfully! Classes: {model.names}")
 
+# Cache loaded models for quick switching
+loaded_models = {"finetuned": model}
+if BASELINE_PATH.exists():
+    loaded_models["v2"] = YOLO(str(BASELINE_PATH))
+
+
 # Mount static folders
 app.mount("/static", StaticFiles(directory=str(BASE_DIR / "static")), name="static")
+app.mount("/css", StaticFiles(directory=str(BASE_DIR / "static" / "css")), name="css")
+app.mount("/js", StaticFiles(directory=str(BASE_DIR / "static" / "js")), name="js")
 app.mount("/samples", StaticFiles(directory=str(BASE_DIR / "samples")), name="samples")
 app.mount("/uploads", StaticFiles(directory=str(BASE_DIR / "uploads")), name="uploads")
+
 
 @app.get("/", response_class=HTMLResponse)
 async def serve_index():
@@ -55,9 +68,13 @@ async def get_samples():
 async def run_segmentation(
     file: UploadFile = File(None),
     sample_name: str = Form(None),
-    conf_threshold: float = Form(0.35)
+    conf_threshold: float = Form(0.35),
+    model_version: str = Form("finetuned")
 ):
     try:
+        # Select active model
+        active_model = loaded_models.get(model_version, model)
+
         # Load image from upload or preset
         if file and file.filename:
             contents = await file.read()
@@ -81,8 +98,9 @@ async def run_segmentation(
 
         img_h, img_w = img.shape[:2]
 
-        # Run inference using our trained custom YOLO11s-seg model
-        results = model.predict(img, conf=conf_threshold, device=device, verbose=False)[0]
+        # Run inference using the active YOLO11s-seg model
+        results = active_model.predict(img, conf=conf_threshold, device=device, verbose=False)[0]
+
 
         detections: List[Dict[str, Any]] = []
         counts = {"fish": 0, "reefs": 0, "human_divers": 0}
@@ -132,10 +150,13 @@ async def run_segmentation(
             "image_url": image_url,
             "image_width": img_w,
             "image_height": img_h,
+            "model_version": model_version,
+            "model_title": "Stage 2 Fine-Tuned (73.4% Fish Precision)" if model_version == "finetuned" else "Stage 1 Baseline (63.3% mAP50)",
             "total_detections": len(detections),
             "counts": counts,
             "detections": detections
         })
+
 
     except Exception as e:
         import traceback

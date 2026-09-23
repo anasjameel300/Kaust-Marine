@@ -28,15 +28,16 @@
       </div>
       <div>
         <h1>KAUST Marine Vision Testing Portal</h1>
-        <span class="sub-brand">Stage 1 Custom-Trained Model: <code>YOLO11s-seg (Clean 3-Class)</code></span>
+        <span class="sub-brand">Active Model: <code id="subBrandModel">YOLO11s-seg (Stage 2 Fine-Tuned)</code></span>
       </div>
     </div>
     <div class="nav-badges">
       <span class="badge model-badge">NVIDIA RTX 3050 GPU</span>
-      <span class="badge weights-badge">Checkpoint: best.pt (40 Epochs)</span>
+      <span class="badge weights-badge" id="modelStatusBadge">Fine-Tuned (73.4% Precision)</span>
       <span class="badge live-badge"><span class="pulse-dot"></span> Ready for Inference</span>
     </div>
   </header>
+
 
   <!-- Main Grid Layout -->
   <main class="dashboard-grid">
@@ -72,6 +73,15 @@
       <div class="card">
         <h2 class="card-title">2. Detection Controls</h2>
         
+        <!-- Model Version Selector -->
+        <div class="control-group">
+          <label for="modelSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-secondary);">Model Checkpoint:</label>
+          <select id="modelSelect" style="width: 100%; background: #030810; border: 1px solid var(--border-color); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none;">
+            <option value="finetuned" selected>⭐ Stage 2 Fine-Tuned (73.4% Fish Precision)</option>
+            <option value="v2">📦 Stage 1 Baseline (63.3% mAP50)</option>
+          </select>
+        </div>
+
         <div class="control-group">
           <div class="slider-header">
             <label for="confSlider">Confidence Threshold:</label>
@@ -79,6 +89,7 @@
           </div>
           <input type="range" id="confSlider" min="0.10" max="0.80" step="0.05" value="0.35">
         </div>
+
 
         <!-- Class Filter Toggles -->
         <div class="filter-box">

@@ -1,0 +1,62 @@
+# Python artifacts
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+.venv/
+env/
+ENV/
+
+# Model Weights & Large Checkpoints (Store on Hugging Face / Zenodo / DVC)
+*.pt
+*.pth
+*.bin
+*.safetensors
+*.onnx
+*.engine
+weights/
+
+# Large Datasets, Raw Video & Temporary Field Imagery
+datasets/
+data/raw/
+data/FishDet-M/
+*.mp4
+*.avi
+*.mov
+*.mkv
+*.tar
+*.tar.gz
+*.zip
+
+# Ultralytics & Training Runs
+runs/
+*.log
+
+# IDE & Editor Configuration
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+desktop.ini

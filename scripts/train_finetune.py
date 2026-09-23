@@ -128,9 +128,11 @@ def finetune():
     print("=" * 72 + "\n")
 
     # Final detailed class evaluation
-    print("[Evaluation] Running full per-class validation on best weights...")
-    val_model = YOLO("runs/segment/models/kaust_fish_seg_finetune_v1/weights/best.pt")
+    best_weights = Path(results.save_dir) / "weights" / "best.pt"
+    print(f"[Evaluation] Running full per-class validation on: {best_weights}...")
+    val_model = YOLO(str(best_weights))
     val_results = val_model.val(data=str(dataset_yaml), device=device)
+
 
     print("\n" + "=" * 72)
     print("  📊 FINAL PER-CLASS VALIDATION SCORES")

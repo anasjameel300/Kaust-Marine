@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>KAUST Fish Instance Segmentation - Model Testing Portal</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="/static/css/style.css">
+</head>
+<body>
+  <!-- File Protocol Warning Banner (Only visible if opened via double-click without server) -->
+  <div id="fileNoticeBanner" style="display: none; background: linear-gradient(90deg, #b91c1c, #991b1b); color: #fff; padding: 10px 18px; font-size: 13px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.2);">
+    ⚠️ <strong>Notice:</strong> You opened this file directly from disk. To run live GPU model inference, visit the local server: <a href="http://127.0.0.1:8000" style="color: #67e8f9; text-decoration: underline; font-weight: bold; margin-left: 6px;">http://127.0.0.1:8000</a>
+  </div>
+
+  <!-- Header Navbar -->
+  <header class="navbar">
+    <div class="brand">
+      <div class="brand-icon">
+        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+          <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.46-3.44 6-7 6s-7.56-2.54-8.5-6z"></path>
+          <path d="M18 12l4 4-2-4 2-4-4 4z"></path>
+          <circle cx="10" cy="10" r="1.5" fill="currentColor"></circle>
+        </svg>
+      </div>
+      <div>
+        <h1>KAUST Marine Vision Testing Portal</h1>
+        <span class="sub-brand">Stage 1 Custom-Trained Model: <code>YOLO11s-seg (Clean 3-Class)</code></span>
+      </div>
+    </div>
+    <div class="nav-badges">
+      <span class="badge model-badge">NVIDIA RTX 3050 GPU</span>
+      <span class="badge weights-badge">Checkpoint: best.pt (40 Epochs)</span>
+      <span class="badge live-badge"><span class="pulse-dot"></span> Ready for Inference</span>
+    </div>
+  </header>
+
+  <!-- Main Grid Layout -->
+  <main class="dashboard-grid">
+    
+    <!-- Left Sidebar: Controls & Upload -->
+    <aside class="sidebar-panel">
+      <!-- 1. Image Input -->
+      <div class="card">
+        <h2 class="card-title">1. Input Imagery</h2>
+        
+        <div class="upload-dropzone" id="dropZone">
+          <input type="file" id="fileInput" accept="image/*" style="display:none;">
+          <div class="drop-content" onclick="document.getElementById('fileInput').click()">
+            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
+              <polyline points="17 8 12 3 7 8"></polyline>
+              <line x1="12" y1="3" x2="12" y2="15"></line>
+            </svg>
+            <span>Upload Test Field Image</span>
+            <small>Drop custom marine photo or click to browse</small>
+          </div>
+        </div>
+
+        <div class="preset-selector">
+          <label>Or Select Validation Sample:</label>
+          <div class="preset-grid" id="presetGrid">
+            <!-- Dynamically populated sample thumbnails -->
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Model Inference Settings -->
+      <div class="card">
+        <h2 class="card-title">2. Detection Controls</h2>
+        
+        <div class="control-group">
+          <div class="slider-header">
+            <label for="confSlider">Confidence Threshold:</label>
+            <span id="confValue" class="mono-badge">0.35</span>
+          </div>
+          <input type="range" id="confSlider" min="0.10" max="0.80" step="0.05" value="0.35">
+        </div>
+
+        <!-- Class Filter Toggles -->
+        <div class="filter-box">
+          <span class="filter-title">Display Classes:</span>
+          <label class="toggle-item">
+            <input type="checkbox" id="showFish" checked>
+            <span class="class-dot dot-fish"></span>
+            <span class="toggle-label"><strong>Fish (Target Organism)</strong></span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="showReefs">
+            <span class="class-dot dot-reefs"></span>
+            <span class="toggle-label">Reefs (Coral Substrate)</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="showDivers">
+            <span class="class-dot dot-divers"></span>
+            <span class="toggle-label">Human Divers</span>
+          </label>
+        </div>
+
+        <!-- Visual Style Toggles -->
+        <div class="style-box">
+          <label class="toggle-item">
+            <input type="checkbox" id="toggleOutlines" checked>
+            <span class="toggle-label">Neon Contour Glow</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="toggleMasks" checked>
+            <span class="toggle-label">Translucent Mask Fill</span>
+          </label>
+          <label class="toggle-item">
+            <input type="checkbox" id="toggleBadges" checked>
+            <span class="toggle-label">Labels & Confidence</span>
+          </label>
+        </div>
+
+        <button class="btn btn-primary" id="runBtn">
+          <span class="btn-spinner" id="btnSpinner" style="display: none;"></span>
+          <span id="btnText">⚡ Run Instance Segmentation</span>
+        </button>
+      </div>
+
+      <!-- Model Stats Card -->
+      <div class="card info-card">
+        <h2 class="card-title">Model Specifications</h2>
+        <div class="stat-row">
+          <span>Backbone:</span>
+          <strong>YOLO11s-seg (9.4M params)</strong>
+        </div>
+        <div class="stat-row">
+          <span>Trained Weights:</span>
+          <strong>best.pt (Epoch 40 Peak)</strong>
+        </div>
+        <div class="stat-row">
+          <span>Fish Mask mAP50:</span>
+          <strong class="highlight-green">63.3%</strong>
+        </div>
+        <div class="stat-row">
+          <span>Diver Rejection:</span>
+          <strong class="highlight-cyan">69.8% Precision</strong>
+        </div>
+      </div>
+    </aside>
+
+    <!-- Center: Interactive Canvas Visualizer -->
+    <section class="viewer-section">
+      <div class="viewer-toolbar">
+        <div class="toolbar-left">
+          <span class="view-status" id="viewStatus">Select or upload an image to inspect mask boundaries</span>
+        </div>
+        <div class="toolbar-right">
+          <button class="btn btn-sm" id="downloadImgBtn">📸 Save Annotated Image</button>
+        </div>
+      </div>
+
+      <div class="canvas-wrapper" id="canvasWrapper">
+        <canvas id="mainCanvas"></canvas>
+        <div class="canvas-loader" id="canvasLoader" style="display: none;">
+          <div class="spinner"></div>
+          <p>Running YOLO11s-seg GPU Inference...</p>
+        </div>
+      </div>
+
+      <!-- Real-Time Counts Bar -->
+      <div class="metrics-bar">
+        <div class="metric-card">
+          <div class="metric-icon">🐟</div>
+          <div>
+            <span class="metric-title">Fish Detected</span>
+            <strong class="metric-value color-fish" id="fishCountVal">0</strong>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">🪸</div>
+          <div>
+            <span class="metric-title">Reefs Identified</span>
+            <strong class="metric-value color-reefs" id="reefCountVal">0</strong>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">🤿</div>
+          <div>
+            <span class="metric-title">Divers Filtered</span>
+            <strong class="metric-value color-divers" id="diverCountVal">0</strong>
+          </div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-icon">⚡</div>
+          <div>
+            <span class="metric-title">Inference Time</span>
+            <strong class="metric-value" id="latencyVal">-- ms</strong>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Right Sidebar: Detected Organisms List -->
+    <aside class="details-panel">
+      <div class="card full-height">
+        <div class="details-header">
+          <h2>Segmented Instances (<span id="totalBadge">0</span>)</h2>
+        </div>
+        
+        <div class="fish-list" id="fishList">
+          <div class="empty-state">
+            <span>No detections to display.<br>Upload an image or pick a sample on the left.</span>
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </main>
+
+  <script>
+    if (window.location.protocol === 'file:') {
+      const banner = document.getElementById('fileNoticeBanner');
+      if (banner) banner.style.display = 'block';
+    }
+  </script>
+  <script src="js/app.js"></script>
+  <script>
+    if (typeof state === 'undefined') {
+      const s = document.createElement('script');
+      s.src = '/static/js/app.js';
+      document.body.appendChild(s);
+    }
+  </script>
+</body>
+</html>
+

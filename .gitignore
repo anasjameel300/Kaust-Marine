@@ -46,6 +46,16 @@ data/FishDet-M/
 *.tar.gz
 *.zip
 
+# App Media, Uploads, and Sample Images
+app/uploads/*
+!app/uploads/.gitkeep
+app/samples/*
+!app/samples/.gitkeep
+*.jpg
+*.jpeg
+*.png
+*.webp
+
 # Ultralytics & Training Runs
 runs/
 *.log
@@ -60,3 +70,4 @@ runs/
 .DS_Store
 Thumbs.db
 desktop.ini
+

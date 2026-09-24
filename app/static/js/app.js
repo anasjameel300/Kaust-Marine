@@ -64,6 +64,7 @@ const showDivers = document.getElementById('showDivers');
 const toggleOutlines = document.getElementById('toggleOutlines');
 const toggleMasks = document.getElementById('toggleMasks');
 const toggleBadges = document.getElementById('toggleBadges');
+const toggleTiling = document.getElementById('toggleTiling');
 
 const runBtn = document.getElementById('runBtn');
 const btnSpinner = document.getElementById('btnSpinner');
@@ -95,6 +96,10 @@ function setupEventListeners() {
 
   if (modelSelect) {
     modelSelect.addEventListener('change', () => runSegmentation());
+  }
+
+  if (toggleTiling) {
+    toggleTiling.addEventListener('change', () => runSegmentation());
   }
 
 
@@ -211,6 +216,9 @@ async function runSegmentation() {
     if (modelSelect) {
       formData.append('model_version', modelSelect.value);
     }
+    if (toggleTiling) {
+      formData.append('enable_tiling', toggleTiling.checked);
+    }
 
     const res = await fetch('/api/segment', {
       method: 'POST',
@@ -225,8 +233,8 @@ async function runSegmentation() {
     if (data.model_title && modelStatusBadge) {
       modelStatusBadge.textContent = data.model_title;
     }
-    if (subBrandModel && data.model_version) {
-      subBrandModel.textContent = `YOLO11s-seg (${data.model_version === 'finetuned' ? 'Stage 2 Fine-Tuned (73.4% Prec)' : 'Stage 1 Baseline'})`;
+    if (subBrandModel) {
+      subBrandModel.textContent = `${data.model_title} ${data.enable_tiling ? ' + Scale-Sliced Tiling' : ''}`;
     }
 
     state.detections = data.detections || [];
@@ -237,7 +245,7 @@ async function runSegmentation() {
     reefCountVal.textContent = state.counts.reefs || 0;
     diverCountVal.textContent = state.counts.human_divers || 0;
 
-    viewStatus.textContent = `Completed (${data.model_version === 'finetuned' ? 'Fine-Tuned' : 'Baseline'}): ${state.detections.length} total segments identified`;
+    viewStatus.textContent = `Completed: ${state.detections.length} total segments identified (${data.model_title})`;
 
     render();
     updateSidebar();
@@ -366,9 +374,23 @@ function updateSidebar() {
 
     const palette = PALETTES[det.class_name] || PALETTES.fish;
 
+    const sourceBadge = det.source === 'consensus'
+      ? `<span style="background: rgba(0, 255, 179, 0.15); color: #00ffb3; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 255, 179, 0.35); font-weight: 600;">Consensus ✨</span>`
+      : (det.source === 'finetuned'
+        ? `<span style="background: rgba(224, 86, 253, 0.15); color: #e056fd; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(224, 86, 253, 0.35); font-weight: 600;">Fine-Tuned 🎯</span>`
+        : `<span style="background: rgba(103, 232, 249, 0.15); color: #67e8f9; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(103, 232, 249, 0.35); font-weight: 600;">Baseline 🏆</span>`);
+
+    const scaleBadge = det.scale === 'micro'
+      ? `<span style="background: rgba(255, 183, 3, 0.15); color: #ffb703; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 183, 3, 0.35); font-weight: 600;">Micro 📐</span>`
+      : `<span style="background: rgba(255, 255, 255, 0.08); color: #94a3b8; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Macro 🔍</span>`;
+
     card.innerHTML = `
       <div class="instance-header">
-        <span class="instance-class" style="color: ${palette.stroke}">#${det.id} ${det.class_name}</span>
+        <div style="display: flex; align-items: center; gap: 6px;">
+          <span class="instance-class" style="color: ${palette.stroke}">#${det.id} ${det.class_name}</span>
+          ${sourceBadge}
+          ${scaleBadge}
+        </div>
         <span class="instance-conf" style="background: ${palette.fill}; color: ${palette.stroke}">
           ${Math.round(det.confidence * 100)}%
         </span>

@@ -4,7 +4,7 @@ import cv2
 import torch
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Tuple
 from fastapi import FastAPI, File, UploadFile, Form, HTTPException
 from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
@@ -35,14 +35,242 @@ if not WEIGHTS_PATH.exists():
 # Device selection: use GPU if available
 device = 0 if torch.cuda.is_available() else "cpu"
 print(f"[Server] Loading production baseline model: {WEIGHTS_PATH} on device={device}...")
-model = YOLO(str(WEIGHTS_PATH))
-print(f"[Server] Model loaded successfully! Classes: {model.names}")
+model_v2 = YOLO(str(WEIGHTS_PATH))
+print(f"[Server] Baseline model loaded! Classes: {model_v2.names}")
 
-# Cache loaded models for quick switching
-loaded_models = {"v2": model}
+loaded_models = {"v2": model_v2}
 if FINETUNED_PATH.exists():
-    loaded_models["finetuned"] = YOLO(str(FINETUNED_PATH))
+    print(f"[Server] Loading fine-tuned model: {FINETUNED_PATH}...")
+    model_finetuned = YOLO(str(FINETUNED_PATH))
+    loaded_models["finetuned"] = model_finetuned
+    print(f"[Server] Fine-tuned model loaded!")
+else:
+    model_finetuned = model_v2
 
+# Step 1: Geometry and Metric Helpers
+def compute_box_metrics(b1, b2):
+    # b: [x1, y1, x2, y2]
+    xA = max(b1[0], b2[0])
+    yA = max(b1[1], b2[1])
+    xB = min(b1[2], b2[2])
+    yB = min(b1[3], b2[3])
+    interW = max(0.0, xB - xA)
+    interH = max(0.0, yB - yA)
+    interArea = interW * interH
+    area1 = max(1e-5, (b1[2] - b1[0]) * (b1[3] - b1[1]))
+    area2 = max(1e-5, (b2[2] - b2[0]) * (b2[3] - b2[1]))
+    iou = interArea / float(area1 + area2 - interArea)
+    containment = interArea / float(min(area1, area2))
+    return iou, containment
+
+def extract_candidates(result, offset_x=0, offset_y=0, source_model="baseline", scale_tag="macro") -> List[Dict[str, Any]]:
+    candidates = []
+    boxes = result.boxes
+    masks = result.masks
+    if boxes is None or masks is None or len(masks.data) == 0:
+        return candidates
+
+    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
+    tile_h, tile_w = result.orig_shape
+
+    for i in range(len(boxes)):
+        b = boxes[i]
+        cls_id = int(b.cls[0].item())
+        cls_name = result.names.get(cls_id, f"class_{cls_id}")
+        conf = float(b.conf[0].item())
+
+        bx = b.xyxy[0].cpu().numpy()
+        box_coords = [
+            float(bx[0] + offset_x),
+            float(bx[1] + offset_y),
+            float(bx[2] + offset_x),
+            float(bx[3] + offset_y)
+        ]
+
+        # Extract binary mask
+        m_tensor = (masks.data[i].cpu().numpy() * 255).astype(np.uint8)
+        if m_tensor.shape[:2] != (tile_h, tile_w):
+            m_tensor = cv2.resize(m_tensor, (tile_w, tile_h), interpolation=cv2.INTER_LINEAR)
+            m_tensor = (m_tensor > 127).astype(np.uint8) * 255
+
+        # Morphological opening: sever 1-2px noise bridges and dissolve stray coral specks
+        cleaned_mask = cv2.morphologyEx(m_tensor, cv2.MORPH_OPEN, kernel, iterations=1)
+        contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        if not contours:
+            continue
+        
+        main_contour = max(contours, key=cv2.contourArea)
+        area_raw = cv2.contourArea(main_contour)
+        if area_raw < 20:
+            continue
+
+        # Sub-pixel smooth polygon (epsilon = 0.5 preserves true anatomical curves)
+        approx = cv2.approxPolyDP(main_contour, 0.5, True)
+        polygon_coords = [
+            [round(float(pt[0][0] + offset_x), 1), round(float(pt[0][1] + offset_y), 1)]
+            for pt in approx
+        ]
+
+        poly_np = np.array(polygon_coords, dtype=np.float32)
+        rect = cv2.minAreaRect(poly_np)
+        oriented_length = float(max(rect[1]))
+        body_depth = float(min(rect[1]))
+        area_px = float(cv2.contourArea(poly_np))
+
+        candidates.append({
+            "class_id": cls_id,
+            "class_name": cls_name,
+            "confidence": conf,
+            "box": box_coords,
+            "polygon": polygon_coords,
+            "oriented_length_px": round(oriented_length, 1),
+            "body_depth_px": round(body_depth, 1),
+            "area_px": round(area_px, 1),
+            "source_model": source_model,
+            "scale": scale_tag,
+            "agreement": 1
+        })
+    return candidates
+
+def generate_tiles(img_w: int, img_h: int, tile_size: int = 640, overlap: float = 0.25) -> List[Tuple[int, int, int, int]]:
+    tiles = []
+    step = int(tile_size * (1.0 - overlap))
+    x_starts = list(range(0, max(1, img_w - tile_size + 1), step))
+    if not x_starts or x_starts[-1] + tile_size < img_w:
+        x_starts.append(max(0, img_w - tile_size))
+    y_starts = list(range(0, max(1, img_h - tile_size + 1), step))
+    if not y_starts or y_starts[-1] + tile_size < img_h:
+        y_starts.append(max(0, img_h - tile_size))
+    x_starts = sorted(list(set(x_starts)))
+    y_starts = sorted(list(set(y_starts)))
+
+    for y in y_starts:
+        for x in x_starts:
+            tiles.append((x, y, min(x + tile_size, img_w), min(y + tile_size, img_h)))
+    return tiles
+
+def merge_teacher_consensus(candidates: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+    if not candidates:
+        return []
+    candidates.sort(key=lambda c: c["confidence"], reverse=True)
+    merged = []
+    used = set()
+
+    for i in range(len(candidates)):
+        if i in used:
+            continue
+        c1 = candidates[i]
+        match = None
+        for j in range(i + 1, len(candidates)):
+            if j in used:
+                continue
+            c2 = candidates[j]
+            if c1["class_id"] != c2["class_id"]:
+                continue
+            iou, cont = compute_box_metrics(c1["box"], c2["box"])
+            if iou >= 0.38 or cont >= 0.65:
+                match = (j, c2)
+                break
+
+        if match is not None:
+            j, c2 = match
+            used.add(i)
+            used.add(j)
+            boosted_conf = min(0.99, max(c1["confidence"], c2["confidence"]) * 1.05 + 0.04)
+            # Pick fine-tuned mask if present, otherwise higher confidence
+            chosen = c1 if c1["source_model"] == "finetuned" else c2
+            entry = dict(chosen)
+            entry["confidence"] = round(boosted_conf, 3)
+            entry["source"] = "consensus"
+            entry["agreement"] = 2
+            merged.append(entry)
+        else:
+            used.add(i)
+            entry = dict(c1)
+            entry["source"] = c1["source_model"]
+            entry["agreement"] = 1
+            merged.append(entry)
+
+    return merged
+
+def run_step1_inference(
+    img: np.ndarray,
+    model_version: str = "ensemble",
+    conf_threshold: float = 0.35,
+    enable_tiling: bool = False
+) -> List[Dict[str, Any]]:
+    img_h, img_w = img.shape[:2]
+
+    # Models to run
+    if model_version == "ensemble":
+        active_models = [("baseline", loaded_models.get("v2", model_v2)), ("finetuned", loaded_models.get("finetuned", model_finetuned))]
+    elif model_version == "finetuned":
+        active_models = [("finetuned", loaded_models.get("finetuned", model_finetuned))]
+    else:
+        active_models = [("baseline", loaded_models.get("v2", model_v2))]
+
+    # 1. Macro Full-Frame Pass (Native 640 preserves whole large fish)
+    macro_cands: List[Dict[str, Any]] = []
+    for tag, mdl in active_models:
+        res = mdl.predict(img, conf=conf_threshold, device=device, verbose=False)[0]
+        macro_cands.extend(extract_candidates(res, 0, 0, source_model=tag, scale_tag="macro"))
+
+    macro_merged = merge_teacher_consensus(macro_cands)
+
+    # 2. Micro Tiling Pass (Optional: slices image into 640x640 sliding patches for tiny distant fish)
+    micro_merged: List[Dict[str, Any]] = []
+    if enable_tiling and (img_w > 700 or img_h > 700):
+        tiles = generate_tiles(img_w, img_h, tile_size=640, overlap=0.25)
+        raw_tile_cands = []
+        for x1, y1, x2, y2 in tiles:
+            tile_crop = img[y1:y2, x1:x2]
+            for tag, mdl in active_models:
+                res = mdl.predict(tile_crop, conf=conf_threshold, device=device, verbose=False)[0]
+                raw_tile_cands.extend(extract_candidates(res, x1, y1, source_model=tag, scale_tag="micro"))
+        
+        micro_merged = merge_teacher_consensus(raw_tile_cands)
+
+    # 3. Macro Priority Integration (Protects large fish from being split by tiles)
+    final_pool: List[Dict[str, Any]] = list(macro_merged)
+
+    for micro in micro_merged:
+        overlaps_macro = False
+        for macro in macro_merged:
+            if macro["class_id"] != micro["class_id"]:
+                continue
+            iou, cont = compute_box_metrics(macro["box"], micro["box"])
+            if iou > 0.35 or cont > 0.60:
+                overlaps_macro = True
+                break
+        
+        if not overlaps_macro:
+            final_pool.append(micro)
+
+    # 4. Containment Suppression (Eliminates orphan tails, needle fragments, and nested boxes)
+    final_pool.sort(key=lambda d: (d["box"][2] - d["box"][0]) * (d["box"][3] - d["box"][1]), reverse=True)
+    suppressed_pool: List[Dict[str, Any]] = []
+
+    for cand in final_pool:
+        is_contained = False
+        for existing in suppressed_pool:
+            if existing["class_id"] != cand["class_id"]:
+                continue
+            iou, cont = compute_box_metrics(existing["box"], cand["box"])
+            # Small box heavily nested inside or touching large box (> 70% contained)
+            if cont > 0.70:
+                is_contained = True
+                break
+            # Standard NMS threshold to deduplicate overlaps
+            if iou > 0.45:
+                is_contained = True
+                break
+        if not is_contained:
+            suppressed_pool.append(cand)
+
+    for idx, d in enumerate(suppressed_pool):
+        d["id"] = idx + 1
+
+    return suppressed_pool
 
 
 # Mount static folders
@@ -70,13 +298,10 @@ async def run_segmentation(
     file: UploadFile = File(None),
     sample_name: str = Form(None),
     conf_threshold: float = Form(0.35),
-    model_version: str = Form("v2")
+    model_version: str = Form("ensemble"),
+    enable_tiling: bool = Form(False)
 ):
-
     try:
-        # Select active model
-        active_model = loaded_models.get(model_version, model)
-
         # Load image from upload or preset
         if file and file.filename:
             contents = await file.read()
@@ -100,78 +325,37 @@ async def run_segmentation(
 
         img_h, img_w = img.shape[:2]
 
-        # Run standard inference (native imgsz=640 to prevent splitting fish)
-        results = active_model.predict(img, conf=conf_threshold, device=device, verbose=False)[0]
+        # Run Step 1 Multi-Teacher & Scale-Slicing Inference Engine
+        detections = run_step1_inference(
+            img=img,
+            model_version=model_version,
+            conf_threshold=conf_threshold,
+            enable_tiling=enable_tiling
+        )
 
-        detections: List[Dict[str, Any]] = []
         counts = {"fish": 0, "reefs": 0, "human_divers": 0}
+        for d in detections:
+            cname = d["class_name"]
+            counts[cname] = counts.get(cname, 0) + 1
 
-        boxes = results.boxes
-        masks = results.masks
-
-        if boxes is not None and masks is not None and len(masks.data) > 0:
-            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
-            for i in range(len(boxes)):
-                b = boxes[i]
-                cls_id = int(b.cls[0].item())
-                cls_name = model.names.get(cls_id, f"class_{cls_id}")
-                conf = float(b.conf[0].item())
-
-                # 1. Extract 2D binary mask tensor
-                m_tensor = (masks.data[i].cpu().numpy() * 255).astype(np.uint8)
-                if m_tensor.shape[:2] != (img_h, img_w):
-                    m_tensor = cv2.resize(m_tensor, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
-                    m_tensor = (m_tensor > 127).astype(np.uint8) * 255
-
-                # 2. Morphological Opening: sever 1-2px noise bridges and dissolve stray coral specks
-                cleaned_mask = cv2.morphologyEx(m_tensor, cv2.MORPH_OPEN, kernel, iterations=1)
-
-                # 3. Find outer contours
-                contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
-                if not contours:
-                    continue
-
-                # 4. Take the primary largest contour (the fish itself, discarding satellite loops)
-                main_contour = max(contours, key=cv2.contourArea)
-                if cv2.contourArea(main_contour) < 20:
-                    continue
-
-                counts[cls_name] = counts.get(cls_name, 0) + 1
-
-                # 5. Smooth sub-pixel polygon (epsilon = 0.5 preserves true anatomical curves)
-                approx = cv2.approxPolyDP(main_contour, 0.5, True)
-                polygon_coords = [[round(float(pt[0][0]), 1), round(float(pt[0][1]), 1)] for pt in approx]
-
-                # Oriented dimensions (snout-to-tail fork length & body depth)
-                poly_np = np.array(polygon_coords, dtype=np.float32)
-                rect = cv2.minAreaRect(poly_np)
-                oriented_length = float(max(rect[1]))
-                body_depth = float(min(rect[1]))
-                area_px = float(cv2.contourArea(poly_np))
-
-                detections.append({
-
-                    "id": i + 1,
-                    "class_id": cls_id,
-                    "class_name": cls_name,
-                    "confidence": round(conf, 3),
-                    "oriented_length_px": round(oriented_length, 1),
-                    "body_depth_px": round(body_depth, 1),
-                    "area_px": round(area_px, 1),
-                    "polygon": polygon_coords
-                })
+        if model_version == "ensemble":
+            model_title = "Multi-Teacher Ensemble (Consensus: Baseline + Fine-Tuned)"
+        elif model_version == "finetuned":
+            model_title = "Stage 2 Fine-Tuned (73.4% Fish Precision)"
+        else:
+            model_title = "Stage 1 Baseline (63.3% Mask mAP50)"
 
         return JSONResponse({
             "image_url": image_url,
             "image_width": img_w,
             "image_height": img_h,
             "model_version": model_version,
-            "model_title": "Stage 2 Fine-Tuned (73.4% Fish Precision)" if model_version == "finetuned" else "Stage 1 Baseline (63.3% mAP50)",
+            "model_title": model_title,
+            "enable_tiling": enable_tiling,
             "total_detections": len(detections),
             "counts": counts,
             "detections": detections
         })
-
 
     except Exception as e:
         import traceback
@@ -181,3 +365,4 @@ async def run_segmentation(
 if __name__ == "__main__":
     import uvicorn
     uvicorn.run("app.server:app", host="127.0.0.1", port=8000, reload=True)
+

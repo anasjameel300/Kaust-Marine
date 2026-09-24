@@ -75,11 +75,23 @@
         
         <!-- Model Version Selector -->
         <div class="control-group">
-          <label for="modelSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-secondary);">Model Checkpoint:</label>
+          <label for="modelSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-secondary);">Architecture & Consensus (Step 1):</label>
           <select id="modelSelect" style="width: 100%; background: #030810; border: 1px solid var(--border-color); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none;">
-            <option value="v2" selected>🏆 Stage 1 Baseline (63.3% mAP, High Recall & Full Coverage)</option>
+            <option value="ensemble" selected>👥 Multi-Teacher Ensemble (Consensus: Baseline + Fine-Tuned)</option>
+            <option value="v2">🏆 Stage 1 Baseline (63.3% mAP, High Recall)</option>
             <option value="finetuned">⚡ Stage 2 Fine-Tuned (73.4% Fish Precision)</option>
           </select>
+        </div>
+
+        <!-- Scale-Sliced Tiling Toggle -->
+        <div class="control-group" style="background: rgba(103, 232, 249, 0.05); padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid rgba(103, 232, 249, 0.2); margin-bottom: 12px;">
+          <label class="toggle-item" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; margin: 0;">
+            <span class="toggle-label" style="font-size: 0.78rem; color: #67e8f9;">
+              <strong>📐 Scale-Sliced Tiling</strong>
+              <small style="display: block; color: var(--text-muted); font-size: 0.68rem; margin-top: 2px;">Macro full-frame + Micro 640px sliding patches</small>
+            </span>
+            <input type="checkbox" id="toggleTiling">
+          </label>
         </div>
 
 

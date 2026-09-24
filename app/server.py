@@ -26,22 +26,23 @@ BASE_DIR = Path(__file__).resolve().parent
 FINETUNED_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_finetune_v1" / "weights" / "best.pt"
 BASELINE_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_v2" / "weights" / "best.pt"
 
-# Default to the newly fine-tuned model (73.4% precision)
-WEIGHTS_PATH = FINETUNED_PATH if FINETUNED_PATH.exists() else BASELINE_PATH
+# Default to the Baseline model (Stage 1 v2, 60.2% Recall, Full Mask Coverage)
+WEIGHTS_PATH = BASELINE_PATH if BASELINE_PATH.exists() else FINETUNED_PATH
 
 if not WEIGHTS_PATH.exists():
     raise FileNotFoundError(f"Model weights not found at {WEIGHTS_PATH}")
 
 # Device selection: use GPU if available
 device = 0 if torch.cuda.is_available() else "cpu"
-print(f"[Server] Loading fine-tuned model: {WEIGHTS_PATH} on device={device}...")
+print(f"[Server] Loading production baseline model: {WEIGHTS_PATH} on device={device}...")
 model = YOLO(str(WEIGHTS_PATH))
 print(f"[Server] Model loaded successfully! Classes: {model.names}")
 
 # Cache loaded models for quick switching
-loaded_models = {"finetuned": model}
-if BASELINE_PATH.exists():
-    loaded_models["v2"] = YOLO(str(BASELINE_PATH))
+loaded_models = {"v2": model}
+if FINETUNED_PATH.exists():
+    loaded_models["finetuned"] = YOLO(str(FINETUNED_PATH))
+
 
 
 # Mount static folders
@@ -69,8 +70,9 @@ async def run_segmentation(
     file: UploadFile = File(None),
     sample_name: str = Form(None),
     conf_threshold: float = Form(0.35),
-    model_version: str = Form("finetuned")
+    model_version: str = Form("v2")
 ):
+
     try:
         # Select active model
         active_model = loaded_models.get(model_version, model)

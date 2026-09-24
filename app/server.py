@@ -100,9 +100,8 @@ async def run_segmentation(
 
         img_h, img_w = img.shape[:2]
 
-        # Run inference using the active YOLO11s-seg model
+        # Run standard inference (native imgsz=640 to prevent splitting fish)
         results = active_model.predict(img, conf=conf_threshold, device=device, verbose=False)[0]
-
 
         detections: List[Dict[str, Any]] = []
         counts = {"fish": 0, "reefs": 0, "human_divers": 0}
@@ -110,34 +109,48 @@ async def run_segmentation(
         boxes = results.boxes
         masks = results.masks
 
-        if boxes is not None and masks is not None and len(masks.xy) > 0:
+        if boxes is not None and masks is not None and len(masks.data) > 0:
+            kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
             for i in range(len(boxes)):
                 b = boxes[i]
                 cls_id = int(b.cls[0].item())
                 cls_name = model.names.get(cls_id, f"class_{cls_id}")
                 conf = float(b.conf[0].item())
-                counts[cls_name] = counts.get(cls_name, 0) + 1
 
-                # Raw polygon vertices
-                poly = masks.xy[i]
-                if len(poly) < 3:
+                # 1. Extract 2D binary mask tensor
+                m_tensor = (masks.data[i].cpu().numpy() * 255).astype(np.uint8)
+                if m_tensor.shape[:2] != (img_h, img_w):
+                    m_tensor = cv2.resize(m_tensor, (img_w, img_h), interpolation=cv2.INTER_LINEAR)
+                    m_tensor = (m_tensor > 127).astype(np.uint8) * 255
+
+                # 2. Morphological Opening: sever 1-2px noise bridges and dissolve stray coral specks
+                cleaned_mask = cv2.morphologyEx(m_tensor, cv2.MORPH_OPEN, kernel, iterations=1)
+
+                # 3. Find outer contours
+                contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+                if not contours:
                     continue
 
-                poly_np = np.array(poly, dtype=np.float32)
+                # 4. Take the primary largest contour (the fish itself, discarding satellite loops)
+                main_contour = max(contours, key=cv2.contourArea)
+                if cv2.contourArea(main_contour) < 20:
+                    continue
 
-                # Smooth / simplify polygon
-                perimeter = cv2.arcLength(poly_np.reshape((-1, 1, 2)), True)
-                epsilon = max(0.8, 0.006 * perimeter)
-                approx = cv2.approxPolyDP(poly_np.reshape((-1, 1, 2)), epsilon, True)
+                counts[cls_name] = counts.get(cls_name, 0) + 1
+
+                # 5. Smooth sub-pixel polygon (epsilon = 0.5 preserves true anatomical curves)
+                approx = cv2.approxPolyDP(main_contour, 0.5, True)
                 polygon_coords = [[round(float(pt[0][0]), 1), round(float(pt[0][1]), 1)] for pt in approx]
 
                 # Oriented dimensions (snout-to-tail fork length & body depth)
+                poly_np = np.array(polygon_coords, dtype=np.float32)
                 rect = cv2.minAreaRect(poly_np)
                 oriented_length = float(max(rect[1]))
                 body_depth = float(min(rect[1]))
                 area_px = float(cv2.contourArea(poly_np))
 
                 detections.append({
+
                     "id": i + 1,
                     "class_id": cls_id,
                     "class_name": cls_name,

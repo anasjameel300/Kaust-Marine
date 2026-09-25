@@ -91,7 +91,7 @@ def get_dataloaders(batch_size: int):
 
     return train_loader, val_loader, train_dataset.classes
 
-def train_single_model(model_key: str):
+def train_single_model(model_key: str, patience: int = 5, min_epochs: int = 25):
     from tqdm import tqdm
     config = MODEL_CONFIGS[model_key]
     save_dir = config["save_dir"]
@@ -99,7 +99,8 @@ def train_single_model(model_key: str):
 
     print("\n" + "=" * 75, flush=True)
     print(f"Training Architecture: {config['description']}", flush=True)
-    print(f"Epochs: {config['epochs']} | Batch Size: {config['batch_size']}", flush=True)
+    print(f"Max Epochs: {config['epochs']} | Min Epochs before Early Stop: {min_epochs} | Patience: {patience}", flush=True)
+    print(f"Batch Size: {config['batch_size']} | Learning Rate: {config['lr']}", flush=True)
     print(f"Artifact Save Directory: {save_dir}", flush=True)
     print("=" * 75, flush=True)
 
@@ -122,12 +123,13 @@ def train_single_model(model_key: str):
     scaler = torch.amp.GradScaler('cuda', enabled=torch.cuda.is_available())
 
     best_top1_acc = 0.0
+    epochs_no_improve = 0
     history = []
 
     start_time = time.time()
     total_epochs = config["epochs"]
 
-    print(f"\n[Training] Starting {total_epochs} Epochs with Live Progression Bar...\n", flush=True)
+    print(f"\n[Training] Starting {total_epochs} Max Epochs with Early Stopping (Patience: {patience}, Min Epochs: {min_epochs})...\n", flush=True)
 
     for epoch in range(1, total_epochs + 1):
         # Training Phase with live tqdm bar
@@ -206,6 +208,7 @@ def train_single_model(model_key: str):
         is_best = val_top1 > best_top1_acc
         if is_best:
             best_top1_acc = val_top1
+            epochs_no_improve = 0
             torch.save({
                 "epoch": epoch,
                 "model_name": config["timm_name"],
@@ -214,11 +217,20 @@ def train_single_model(model_key: str):
                 "val_top1_acc": val_top1,
                 "val_top5_acc": val_top5
             }, str(save_dir / "best.pth"))
+        else:
+            epochs_no_improve += 1
 
         marker = " 🏆 (New Best)" if is_best else ""
         print(f"Epoch [{epoch:02d}/{total_epochs:02d}] "
               f"Train Loss: {train_loss:.4f} | Train Acc: {train_acc*100:5.1f}% || "
               f"Val Loss: {val_loss:.4f} | Val Top-1: {val_top1*100:5.1f}% | Top-5: {val_top5*100:5.1f}%{marker}", flush=True)
+
+        # Early Stopping Logic: only activates after min_epochs
+        if epoch >= min_epochs and epochs_no_improve >= patience:
+            print(f"\n⏹ Early Stopping Triggered at Epoch {epoch}!", flush=True)
+            print(f"  • No validation improvement for {patience} consecutive epochs after epoch {min_epochs}.", flush=True)
+            print(f"  • Best checkpoint preserved with Top-1 Accuracy: {best_top1_acc * 100:.2f}%\n", flush=True)
+            break
 
     total_time = round(time.time() - start_time, 1)
 
@@ -229,6 +241,7 @@ def train_single_model(model_key: str):
         "description": config["description"],
         "best_val_top1_acc": round(best_top1_acc, 4),
         "total_training_seconds": total_time,
+        "stopped_epoch": epoch,
         "classes": class_names,
         "history": history
     }
@@ -236,32 +249,47 @@ def train_single_model(model_key: str):
     with open(save_dir / "training_summary.json", "w", encoding="utf-8") as f:
         json.dump(summary, f, indent=2)
 
-    print("\n" + "-" * 75)
-    print(f"Training Complete for {config['timm_name']} in {total_time}s")
-    print(f"Best Top-1 Validation Accuracy: {best_top1_acc * 100:.2f}%")
-    print(f"Checkpoint saved: {save_dir / 'best.pth'}")
-    print("-" * 75)
+    print("-" * 75, flush=True)
+    print(f"Finished {config['timm_name']} in {total_time}s (Stopped at Epoch {epoch})", flush=True)
+    print(f"Best Top-1 Validation Accuracy: {best_top1_acc * 100:.2f}%", flush=True)
+    print(f"Checkpoint saved: {save_dir / 'best.pth'}", flush=True)
+    print("-" * 75 + "\n", flush=True)
 
     return summary
 
 def main():
-    parser = argparse.ArgumentParser(description="Multi-Model Taxonomic Fish Classifier Training")
-    parser.add_argument("--model", type=str, default="convnext",
-                        choices=["convnext", "mobilenetv4", "swin", "all"],
-                        help="Model architecture to train (convnext, mobilenetv4, swin, or all)")
+    parser = argparse.ArgumentParser(description="Multi-Model Taxonomic Fish Classifier Sequential Training")
+    parser.add_argument("--model", type=str, default="all",
+                        choices=["all", "convnext", "mobilenetv4", "swin"],
+                        help="Model architecture to train (default: all - trains all 3 sequentially)")
+    parser.add_argument("--patience", type=int, default=5,
+                        help="Number of epochs without val improvement before early stopping (default: 5)")
+    parser.add_argument("--min-epochs", type=int, default=20,
+                        help="Minimum epochs to train before early stopping can trigger (default: 20)")
     args = parser.parse_args()
 
-    if args.model == "all":
-        results = {}
-        for m in ["convnext", "mobilenetv4", "swin"]:
-            results[m] = train_single_model(m)
-        print("\n" + "=" * 75)
-        print("ALL ARCHITECTURES TRAINED SUCCESSFULLY!")
-        for m, res in results.items():
-            print(f"  • {m:<12}: Best Top-1 Acc = {res['best_val_top1_acc']*100:.2f}% ({res['total_training_seconds']}s)")
-        print("=" * 75)
-    else:
-        train_single_model(args.model)
+    models_to_train = ["convnext", "mobilenetv4", "swin"] if args.model == "all" else [args.model]
+
+    print("=" * 75, flush=True)
+    print("KAUST Marine Vision - Multi-Model Pipeline Sequence", flush=True)
+    print(f"Planned Models to Train: {', '.join(models_to_train).upper()}", flush=True)
+    print(f"Early Stopping Policy: Patience = {args.patience} epochs (Active after Epoch {args.min_epochs})", flush=True)
+    print("=" * 75, flush=True)
+
+    results = {}
+    for idx, m in enumerate(models_to_train, 1):
+        print(f"\n>>> Starting Pipeline Stage [{idx}/{len(models_to_train)}]: {m.upper()} <<<", flush=True)
+        results[m] = train_single_model(m, patience=args.patience, min_epochs=args.min_epochs)
+
+    print("\n" + "=" * 75, flush=True)
+    print("🏆 ALL MULTI-MODEL ARCHITECTURES TRAINED & VALIDATED SUCCESSFULLY!", flush=True)
+    print("=" * 75, flush=True)
+    print(f"{'Model Architecture':<24} | {'Best Top-1 Acc':>14} | {'Stopped Epoch':>13} | {'Training Time':>13}")
+    print("-" * 75, flush=True)
+    for m, res in results.items():
+        print(f"{res['timm_name']:<24} | {res['best_val_top1_acc']*100:>13.2f}% | {res['stopped_epoch']:>13} | {res['total_training_seconds']:>12.1f}s", flush=True)
+    print("=" * 75 + "\n", flush=True)
 
 if __name__ == "__main__":
     main()
+

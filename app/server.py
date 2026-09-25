@@ -10,8 +10,10 @@ from fastapi.responses import HTMLResponse, JSONResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
+from app.taxonomic_engine import taxonomic_engine
+from app.biomass_engine import biomass_engine, CALIBRATION_PRESETS
 
-app = FastAPI(title="KAUST Marine Fish Instance Segmentation Test Portal")
+app = FastAPI(title="KAUST Marine Fish Instance Segmentation & Stock Assessment Portal")
 
 app.add_middleware(
     CORSMiddleware,
@@ -293,13 +295,20 @@ async def get_samples():
     files = sorted([f for f in os.listdir(samples_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
     return [{"filename": f, "url": f"/samples/{f}"} for f in files]
 
+@app.get("/api/calibration_presets")
+async def get_calibration_presets():
+    return CALIBRATION_PRESETS
+
 @app.post("/api/segment")
 async def run_segmentation(
     file: UploadFile = File(None),
     sample_name: str = Form(None),
     conf_threshold: float = Form(0.35),
     model_version: str = Form("ensemble"),
-    enable_tiling: bool = Form(False)
+    enable_tiling: bool = Form(False),
+    classifier_mode: str = Form("ensemble"),
+    calibration_preset: str = Form("custom"),
+    pixels_per_cm: float = Form(25.0)
 ):
     try:
         # Load image from upload or preset
@@ -334,9 +343,39 @@ async def run_segmentation(
         )
 
         counts = {"fish": 0, "reefs": 0, "human_divers": 0}
+
+        # Step 2: Multi-Model Taxonomic Classification & Step 3: Biomass Engine
         for d in detections:
             cname = d["class_name"]
             counts[cname] = counts.get(cname, 0) + 1
+
+            if cname == "fish":
+                bx = d["box"]
+                x1 = max(0, int(bx[0]))
+                y1 = max(0, int(bx[1]))
+                x2 = min(img_w, int(bx[2]))
+                y2 = min(img_h, int(bx[3]))
+
+                # Crop fish organism
+                crop = img[y1:y2, x1:x2]
+                tax_res = taxonomic_engine.classify_crop(crop, mode=classifier_mode)
+                d["taxonomy"] = tax_res
+
+                # Compute individual biomass morphometrics
+                bio_res = biomass_engine.calculate_individual_morphometrics(
+                    oriented_length_px=d.get("oriented_length_px", 10.0),
+                    body_depth_px=d.get("body_depth_px", 5.0),
+                    pixels_per_cm=pixels_per_cm,
+                    fb_a=tax_res["fb_a"],
+                    fb_b=tax_res["fb_b"]
+                )
+                d["biomass"] = bio_res
+            else:
+                d["taxonomy"] = None
+                d["biomass"] = None
+
+        # Compute Community Ecological Metrics
+        community_metrics = biomass_engine.calculate_community_metrics(detections)
 
         if model_version == "ensemble":
             model_title = "Multi-Teacher Ensemble (Consensus: Baseline + Fine-Tuned)"
@@ -351,9 +390,13 @@ async def run_segmentation(
             "image_height": img_h,
             "model_version": model_version,
             "model_title": model_title,
+            "classifier_mode": classifier_mode,
+            "calibration_preset": calibration_preset,
+            "pixels_per_cm": pixels_per_cm,
             "enable_tiling": enable_tiling,
             "total_detections": len(detections),
             "counts": counts,
+            "community_metrics": community_metrics,
             "detections": detections
         })
 

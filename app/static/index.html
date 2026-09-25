@@ -73,11 +73,11 @@
       <div class="card">
         <h2 class="card-title">2. Detection Controls</h2>
         
-        <!-- Model Version Selector -->
+        <!-- Model Version Selector (Step 1 Segmentation) -->
         <div class="control-group">
-          <label for="modelSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-secondary);">Architecture & Consensus (Step 1):</label>
+          <label for="modelSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-secondary);">Stage 1: Segmentation Backbone:</label>
           <select id="modelSelect" style="width: 100%; background: #030810; border: 1px solid var(--border-color); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none;">
-            <option value="ensemble" selected>👥 Multi-Teacher Ensemble (Consensus: Baseline + Fine-Tuned)</option>
+            <option value="ensemble" selected>👥 Multi-Teacher Ensemble (Baseline + Fine-Tuned)</option>
             <option value="v2">🏆 Stage 1 Baseline (63.3% mAP, High Recall)</option>
             <option value="finetuned">⚡ Stage 2 Fine-Tuned (73.4% Fish Precision)</option>
           </select>
@@ -94,6 +94,35 @@
           </label>
         </div>
 
+        <!-- Stage 2: Multi-Model Taxonomic Classifier Selector -->
+        <div class="control-group" style="background: rgba(168, 85, 247, 0.07); padding: 10px; border-radius: var(--radius-md); border: 1px solid rgba(168, 85, 247, 0.3); margin-bottom: 12px;">
+          <label for="classifierSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: #c084fc; font-weight: 600;">Stage 2: Taxonomic Classifier Engine:</label>
+          <select id="classifierSelect" style="width: 100%; background: #030810; border: 1px solid rgba(168, 85, 247, 0.4); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none;">
+            <option value="ensemble" selected>🏆 Multi-Model Ensemble (Soft-Voting: YOLO + ConvNeXt + Swin + MobileNet)</option>
+            <option value="swin">🔷 Swin-Tiny Transformer (98.89% Top-1 Acc)</option>
+            <option value="mobilenetv4">⚡ MobileNetV4-Small (98.00% Top-1 Acc)</option>
+            <option value="convnext">🔶 ConvNeXt-Tiny (97.33% Top-1 Acc)</option>
+            <option value="yolo">🟢 YOLO11s-cls (99.78% Top-1 Acc)</option>
+          </select>
+          <small style="display: block; color: var(--text-muted); font-size: 0.68rem; margin-top: 4px;">Runs parallel consensus & agreement voting per fish crop</small>
+        </div>
+
+        <!-- Stage 3: Physical Calibration & Biomass Controls (Option 1) -->
+        <div class="control-group" style="background: rgba(16, 185, 129, 0.06); padding: 10px; border-radius: var(--radius-md); border: 1px solid rgba(16, 185, 129, 0.25); margin-bottom: 12px;">
+          <label for="presetSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: #34d399; font-weight: 600;">Stage 3: Sizing & Biomass Rig (Option 1):</label>
+          <select id="presetSelect" style="width: 100%; background: #030810; border: 1px solid rgba(16, 185, 129, 0.4); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none; margin-bottom: 8px;">
+            <option value="custom" selected>Custom Calibration Scale</option>
+            <option value="bruvs_rig">🎥 In-Situ BRUVs Rig (Dr. Renato Morais) - 22 px/cm</option>
+            <option value="measuring_board">📏 Catch Measuring Board (Dr. Jessica Zamborain) - 35 px/cm</option>
+          </select>
+
+          <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+            <label for="scaleSlider" style="font-size: 0.74rem; color: var(--text-secondary);">Scale Ratio (px / cm):</label>
+            <span id="scaleValue" class="mono-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">25.0</span>
+          </div>
+          <input type="range" id="scaleSlider" min="10.0" max="60.0" step="1.0" value="25.0">
+          <small style="display: block; color: var(--text-muted); font-size: 0.68rem; margin-top: 4px;">FishBase Allometric Conversion: <em>W = a · (L)^b</em></small>
+        </div>
 
         <div class="control-group">
           <div class="slider-header">
@@ -102,7 +131,6 @@
           </div>
           <input type="range" id="confSlider" min="0.10" max="0.80" step="0.05" value="0.35">
         </div>
-
 
         <!-- Class Filter Toggles -->
         <div class="filter-box">
@@ -136,7 +164,7 @@
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="toggleBadges" checked>
-            <span class="toggle-label">Labels & Confidence</span>
+            <span class="toggle-label">Labels, Length & Biomass</span>
           </label>
         </div>
 
@@ -187,27 +215,34 @@
         </div>
       </div>
 
-      <!-- Real-Time Counts Bar -->
-      <div class="metrics-bar">
+      <!-- Real-Time Ecological & Morphometrics Bar -->
+      <div class="metrics-bar" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
         <div class="metric-card">
           <div class="metric-icon">🐟</div>
           <div>
-            <span class="metric-title">Fish Detected</span>
+            <span class="metric-title">Fish Count</span>
             <strong class="metric-value color-fish" id="fishCountVal">0</strong>
           </div>
         </div>
-        <div class="metric-card">
-          <div class="metric-icon">🪸</div>
+        <div class="metric-card" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3);">
+          <div class="metric-icon">⚖️</div>
           <div>
-            <span class="metric-title">Reefs Identified</span>
-            <strong class="metric-value color-reefs" id="reefCountVal">0</strong>
+            <span class="metric-title">Total Biomass (W)</span>
+            <strong class="metric-value" style="color: #34d399;" id="totalBiomassVal">0.00 kg</strong>
           </div>
         </div>
-        <div class="metric-card">
-          <div class="metric-icon">🤿</div>
+        <div class="metric-card" style="background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3);">
+          <div class="metric-icon">🎣</div>
           <div>
-            <span class="metric-title">Divers Filtered</span>
-            <strong class="metric-value color-divers" id="diverCountVal">0</strong>
+            <span class="metric-title">Commercial Catch</span>
+            <strong class="metric-value" style="color: #fbbf24;" id="commercialYieldVal">0.00 kg (0%)</strong>
+          </div>
+        </div>
+        <div class="metric-card" style="background: rgba(168, 85, 247, 0.08); border-color: rgba(168, 85, 247, 0.3);">
+          <div class="metric-icon">🌿</div>
+          <div>
+            <span class="metric-title">Diversity Index (H')</span>
+            <strong class="metric-value" style="color: #c084fc;" id="shannonVal">0.00</strong>
           </div>
         </div>
         <div class="metric-card">

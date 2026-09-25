@@ -58,6 +58,12 @@ const modelStatusBadge = document.getElementById('modelStatusBadge');
 const subBrandModel = document.getElementById('subBrandModel');
 const showFish = document.getElementById('showFish');
 
+// Stage 2 & 3 Controls
+const classifierSelect = document.getElementById('classifierSelect');
+const presetSelect = document.getElementById('presetSelect');
+const scaleSlider = document.getElementById('scaleSlider');
+const scaleValue = document.getElementById('scaleValue');
+
 const showReefs = document.getElementById('showReefs');
 const showDivers = document.getElementById('showDivers');
 
@@ -73,6 +79,9 @@ const btnText = document.getElementById('btnText');
 const fishCountVal = document.getElementById('fishCountVal');
 const reefCountVal = document.getElementById('reefCountVal');
 const diverCountVal = document.getElementById('diverCountVal');
+const totalBiomassVal = document.getElementById('totalBiomassVal');
+const commercialYieldVal = document.getElementById('commercialYieldVal');
+const shannonVal = document.getElementById('shannonVal');
 const latencyVal = document.getElementById('latencyVal');
 const totalBadge = document.getElementById('totalBadge');
 
@@ -102,6 +111,35 @@ function setupEventListeners() {
     toggleTiling.addEventListener('change', () => runSegmentation());
   }
 
+  if (classifierSelect) {
+    classifierSelect.addEventListener('change', () => runSegmentation());
+  }
+
+  if (presetSelect) {
+    presetSelect.addEventListener('change', (e) => {
+      const p = e.target.value;
+      if (p === 'bruvs_rig') {
+        scaleSlider.value = 22.0;
+        scaleValue.textContent = '22.0';
+      } else if (p === 'measuring_board') {
+        scaleSlider.value = 35.0;
+        scaleValue.textContent = '35.0';
+      }
+      runSegmentation();
+    });
+  }
+
+  if (scaleSlider) {
+    scaleSlider.addEventListener('input', (e) => {
+      scaleValue.textContent = parseFloat(e.target.value).toFixed(1);
+    });
+    scaleSlider.addEventListener('change', () => {
+      if (presetSelect && presetSelect.value !== 'custom') {
+        presetSelect.value = 'custom';
+      }
+      runSegmentation();
+    });
+  }
 
   // Filter Toggles
   showFish.addEventListener('change', (e) => { state.filters.fish = e.target.checked; render(); updateSidebar(); });
@@ -203,7 +241,7 @@ function loadImageAndSegment(url) {
 async function runSegmentation() {
   const startTime = performance.now();
   setLoading(true);
-  viewStatus.textContent = 'Running custom YOLO11s-seg GPU inference...';
+  viewStatus.textContent = 'Running multi-model detection, taxonomic classification & biomass pipeline...';
 
   try {
     const formData = new FormData();
@@ -218,6 +256,15 @@ async function runSegmentation() {
     }
     if (toggleTiling) {
       formData.append('enable_tiling', toggleTiling.checked);
+    }
+    if (classifierSelect) {
+      formData.append('classifier_mode', classifierSelect.value);
+    }
+    if (presetSelect) {
+      formData.append('calibration_preset', presetSelect.value);
+    }
+    if (scaleSlider) {
+      formData.append('pixels_per_cm', scaleSlider.value);
     }
 
     const res = await fetch('/api/segment', {
@@ -245,11 +292,18 @@ async function runSegmentation() {
     reefCountVal.textContent = state.counts.reefs || 0;
     diverCountVal.textContent = state.counts.human_divers || 0;
 
-    viewStatus.textContent = `Completed: ${state.detections.length} total segments identified (${data.model_title})`;
+    // Update Community Metrics (Biomass, Catch, Shannon Diversity)
+    if (data.community_metrics) {
+      const cm = data.community_metrics;
+      if (totalBiomassVal) totalBiomassVal.textContent = `${cm.total_biomass_kg.toFixed(2)} kg`;
+      if (commercialYieldVal) commercialYieldVal.textContent = `${cm.commercial_biomass_kg.toFixed(2)} kg (${Math.round(cm.commercial_ratio_pct)}%)`;
+      if (shannonVal) shannonVal.textContent = cm.shannon_diversity_index.toFixed(2);
+    }
+
+    viewStatus.textContent = `Completed: ${state.detections.length} total segments identified (${data.model_title} | Mode: ${data.classifier_mode})`;
 
     render();
     updateSidebar();
-
 
   } catch (err) {
     console.error(err);
@@ -262,7 +316,7 @@ async function runSegmentation() {
 function setLoading(isLoading) {
   canvasLoader.style.display = isLoading ? 'flex' : 'none';
   btnSpinner.style.display = isLoading ? 'inline-block' : 'none';
-  btnText.textContent = isLoading ? 'Segmenting...' : '⚡ Run Instance Segmentation';
+  btnText.textContent = isLoading ? 'Computing...' : '⚡ Run Instance Segmentation';
   runBtn.disabled = isLoading;
 }
 
@@ -331,8 +385,18 @@ function drawBadge(det, palette, isActive) {
     }
   });
 
-  const label = `${det.class_name.toUpperCase()} (${Math.round(det.confidence * 100)}%)`;
-  const subText = `${Math.round(det.oriented_length_px)}px length | ${Math.round(det.area_px)}px²`;
+  let label = `${det.class_name.toUpperCase()} (${Math.round(det.confidence * 100)}%)`;
+  let subText = `${Math.round(det.oriented_length_px)}px length | ${Math.round(det.area_px)}px²`;
+
+  if (det.taxonomy && det.taxonomy.family) {
+    const fam = det.taxonomy.family.toUpperCase();
+    const cname = det.taxonomy.common_name ? ` (${det.taxonomy.common_name})` : '';
+    const taxConf = Math.round((det.taxonomy.confidence || 0) * 100);
+    label = `${fam}${cname} ${taxConf}%`;
+    if (det.biomass && det.biomass.fork_length_cm) {
+      subText = `L=${det.biomass.fork_length_cm}cm | W=${det.biomass.biomass_g}g`;
+    }
+  }
 
   ctx.save();
   ctx.font = 'bold 11px Outfit, sans-serif';
@@ -384,23 +448,67 @@ function updateSidebar() {
       ? `<span style="background: rgba(255, 183, 3, 0.15); color: #ffb703; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 183, 3, 0.35); font-weight: 600;">Micro 📐</span>`
       : `<span style="background: rgba(255, 255, 255, 0.08); color: #94a3b8; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Macro 🔍</span>`;
 
-    card.innerHTML = `
-      <div class="instance-header">
-        <div style="display: flex; align-items: center; gap: 6px;">
-          <span class="instance-class" style="color: ${palette.stroke}">#${det.id} ${det.class_name}</span>
-          ${sourceBadge}
-          ${scaleBadge}
+    // Agreement and Taxonomic Consensus tags
+    let agreementBadge = '';
+    let votePills = '';
+    let taxMetaHtml = '';
+
+    if (det.taxonomy) {
+      const tax = det.taxonomy;
+      const statusColor = tax.consensus_level === 'high' ? '#34d399' : (tax.consensus_level === 'moderate' ? '#fbbf24' : '#f87171');
+      agreementBadge = `<span style="background: rgba(168, 85, 247, 0.15); color: ${statusColor}; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid ${statusColor}44; font-weight: 600;">${tax.agreement_status}</span>`;
+
+      if (tax.model_votes) {
+        votePills = Object.entries(tax.model_votes).map(([mName, predFam]) => {
+          return `<span style="display:inline-block; font-size:0.62rem; background:rgba(255,255,255,0.06); padding:2px 5px; border-radius:3px; margin:2px; color:#cbd5e1;"><strong style="color:#a855f7;">${mName}:</strong> ${predFam}</span>`;
+        }).join('');
+      }
+
+      taxMetaHtml = `
+        <div style="margin-top: 6px; padding: 6px 8px; background: rgba(168, 85, 247, 0.06); border-radius: 6px; border: 1px solid rgba(168, 85, 247, 0.2);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
+            <span style="font-size: 0.72rem; color: #c084fc; font-weight: 600;">Taxon: ${tax.family} (${tax.common_name})</span>
+            <span style="font-size: 0.68rem; color: #94a3b8; font-style: italic;">${tax.scientific_name}</span>
+          </div>
+          <div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 4px;">
+            Guild: <strong style="color: #f1f5f9;">${tax.trophic_guild}</strong> | Target: <strong style="color: ${tax.is_commercial ? '#34d399' : '#94a3b8'};">${tax.is_commercial ? 'Commercial Fishery' : 'Ecological'}</strong>
+          </div>
+          ${votePills ? `<div style="display:flex; flex-wrap:wrap; gap:2px; margin-top:3px;">${votePills}</div>` : ''}
         </div>
-        <span class="instance-conf" style="background: ${palette.fill}; color: ${palette.stroke}">
-          ${Math.round(det.confidence * 100)}%
-        </span>
+      `;
+    }
+
+    // Morphometrics & Biomass table
+    const bioHtml = det.biomass ? `
+      <div class="instance-stats" style="margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
+        <div><small>Fork Length (L)</small><strong style="color: #34d399;">${det.biomass.fork_length_cm} cm</strong></div>
+        <div><small>Body Depth (D)</small><strong style="color: #38bdf8;">${det.biomass.body_depth_cm} cm</strong></div>
+        <div><small>Biomass (W)</small><strong style="color: #fbbf24;">${det.biomass.biomass_g} g</strong></div>
+        <div><small>Aspect (L/D)</small><strong>${det.biomass.aspect_ratio}</strong></div>
       </div>
+    ` : `
       <div class="instance-stats">
         <div><small>Oriented Length</small><strong>${det.oriented_length_px} px</strong></div>
         <div><small>Body Depth</small><strong>${det.body_depth_px} px</strong></div>
         <div><small>Mask Area</small><strong>${det.area_px} px²</strong></div>
         <div><small>Polygon Points</small><strong>${det.polygon.length} pts</strong></div>
       </div>
+    `;
+
+    card.innerHTML = `
+      <div class="instance-header">
+        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
+          <span class="instance-class" style="color: ${palette.stroke}">#${det.id} ${det.taxonomy ? det.taxonomy.family : det.class_name}</span>
+          ${sourceBadge}
+          ${scaleBadge}
+          ${agreementBadge}
+        </div>
+        <span class="instance-conf" style="background: ${palette.fill}; color: ${palette.stroke}">
+          ${Math.round(det.confidence * 100)}%
+        </span>
+      </div>
+      ${taxMetaHtml}
+      ${bioHtml}
     `;
 
     card.addEventListener('mouseenter', () => { state.hoveredId = det.id; render(); });

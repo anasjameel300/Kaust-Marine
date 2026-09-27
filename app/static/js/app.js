@@ -20,28 +20,28 @@ const state = {
   }
 };
 
-// Styling Palette per Class
+// Styling Palette per Class (Clean scientific dark theme)
 const PALETTES = {
   fish: {
-    stroke: '#00ffb3',
-    fill: 'rgba(0, 255, 179, 0.24)',
-    glow: 'rgba(0, 255, 179, 0.65)',
-    labelBg: 'rgba(5, 25, 20, 0.92)',
-    badgeColor: '#00ffb3'
+    stroke: '#10b981',
+    fill: 'rgba(16, 185, 129, 0.18)',
+    glow: 'rgba(16, 185, 129, 0.35)',
+    labelBg: 'rgba(6, 14, 24, 0.92)',
+    badgeColor: '#10b981'
   },
   reefs: {
-    stroke: '#ffb703',
-    fill: 'rgba(255, 183, 3, 0.22)',
-    glow: 'rgba(255, 183, 3, 0.55)',
-    labelBg: 'rgba(30, 22, 5, 0.92)',
-    badgeColor: '#ffb703'
+    stroke: '#f59e0b',
+    fill: 'rgba(245, 158, 11, 0.18)',
+    glow: 'rgba(245, 158, 11, 0.35)',
+    labelBg: 'rgba(24, 16, 6, 0.92)',
+    badgeColor: '#f59e0b'
   },
   human_divers: {
-    stroke: '#e056fd',
-    fill: 'rgba(224, 86, 253, 0.26)',
-    glow: 'rgba(224, 86, 253, 0.65)',
-    labelBg: 'rgba(28, 8, 32, 0.92)',
-    badgeColor: '#e056fd'
+    stroke: '#8b5cf6',
+    fill: 'rgba(139, 92, 246, 0.18)',
+    glow: 'rgba(139, 92, 246, 0.35)',
+    labelBg: 'rgba(18, 10, 28, 0.92)',
+    badgeColor: '#8b5cf6'
   }
 };
 
@@ -91,28 +91,48 @@ const fileInput = document.getElementById('fileInput');
 const presetGrid = document.getElementById('presetGrid');
 const downloadImgBtn = document.getElementById('downloadImgBtn');
 
+const classifyBtn = document.getElementById('classifyBtn');
+const classifySpinner = document.getElementById('classifySpinner');
+const classifyBtnText = document.getElementById('classifyBtnText');
+const classifyBadge = document.getElementById('classifyBadge');
+
 // Initialize
-window.addEventListener('DOMContentLoaded', () => {
+function initApp() {
   setupEventListeners();
   loadSampleThumbnails();
-});
+}
+
+if (document.readyState === 'loading') {
+  window.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
 
 function setupEventListeners() {
   confSlider.addEventListener('input', (e) => {
     confValue.textContent = parseFloat(e.target.value).toFixed(2);
   });
-  confSlider.addEventListener('change', () => runSegmentation());
+  confSlider.addEventListener('change', () => runSegmentation(state.isClassified));
 
   if (modelSelect) {
-    modelSelect.addEventListener('change', () => runSegmentation());
+    modelSelect.addEventListener('change', () => runSegmentation(state.isClassified));
   }
 
   if (toggleTiling) {
-    toggleTiling.addEventListener('change', () => runSegmentation());
+    toggleTiling.addEventListener('change', () => runSegmentation(state.isClassified));
   }
 
   if (classifierSelect) {
-    classifierSelect.addEventListener('change', () => runSegmentation());
+    classifierSelect.addEventListener('change', () => {
+      if (state.isClassified) runSegmentation(true);
+    });
+  }
+
+  if (classifyBtn) {
+    classifyBtn.addEventListener('click', () => {
+      state.isClassified = true;
+      runSegmentation(true);
+    });
   }
 
   if (presetSelect) {
@@ -151,7 +171,7 @@ function setupEventListeners() {
   toggleMasks.addEventListener('change', (e) => { state.styles.masks = e.target.checked; render(); });
   toggleBadges.addEventListener('change', (e) => { state.styles.badges = e.target.checked; render(); });
 
-  runBtn.addEventListener('click', runSegmentation);
+  runBtn.addEventListener('click', () => runSegmentation(false));
 
   // File Upload
   dropZone.addEventListener('dragover', (e) => { e.preventDefault(); dropZone.classList.add('dragover'); });
@@ -219,6 +239,10 @@ async function loadSampleThumbnails() {
 function handleFile(file) {
   state.uploadedFile = file;
   state.currentSampleName = null;
+  state.detections = [];
+  state.selectedId = null;
+  state.hoveredId = null;
+  updateSidebar();
   document.querySelectorAll('.preset-thumb').forEach(t => t.classList.remove('active'));
 
   const reader = new FileReader();
@@ -229,19 +253,57 @@ function handleFile(file) {
 }
 
 function loadImageAndSegment(url) {
-  state.imageObj.onload = () => {
-    canvas.width = state.imageObj.naturalWidth;
-    canvas.height = state.imageObj.naturalHeight;
+  state.detections = [];
+  state.selectedId = null;
+  state.hoveredId = null;
+  state.isClassified = false;
+  if (classifyBadge) {
+    classifyBadge.textContent = 'On-Demand';
+    classifyBadge.style.color = 'var(--accent-cyan)';
+    classifyBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+  }
+  if (classifyBtnText) classifyBtnText.textContent = 'Run Identification (Species ID)';
+  updateSidebar();
+
+  const img = new Image();
+  let done = false;
+  const onReady = () => {
+    if (done) return;
+    done = true;
+    state.imageObj = img;
+    canvas.width = img.naturalWidth || 640;
+    canvas.height = img.naturalHeight || 640;
+    state.detections = [];
     render();
-    runSegmentation();
+    // Auto-trigger Stage 1 instance segmentation
+    runSegmentation(false);
   };
-  state.imageObj.src = url;
+
+  img.onload = onReady;
+  img.onerror = (err) => {
+    console.error('Failed to load image:', url, err);
+    runSegmentation(false);
+  };
+
+  img.src = url;
+  if (img.complete && img.naturalWidth > 0) {
+    onReady();
+  }
 }
 
-async function runSegmentation() {
+async function runSegmentation(runClassify = false) {
   const startTime = performance.now();
   setLoading(true);
-  viewStatus.textContent = 'Running multi-model detection, taxonomic classification & biomass pipeline...';
+
+  if (runClassify && classifySpinner) {
+    classifySpinner.style.display = 'inline-block';
+    if (classifyBtnText) classifyBtnText.textContent = 'Classifying Species...';
+    if (classifyBtn) classifyBtn.disabled = true;
+  }
+
+  viewStatus.textContent = runClassify
+    ? 'Running Stage 2 taxonomic ensemble classification & allometric sizing...'
+    : 'Running fast Stage 1 instance segmentation & morphometrics...';
 
   try {
     const formData = new FormData();
@@ -257,6 +319,7 @@ async function runSegmentation() {
     if (toggleTiling) {
       formData.append('enable_tiling', toggleTiling.checked);
     }
+    formData.append('run_classification', runClassify ? 'true' : 'false');
     if (classifierSelect) {
       formData.append('classifier_mode', classifierSelect.value);
     }
@@ -286,11 +349,11 @@ async function runSegmentation() {
 
     state.detections = data.detections || [];
     state.counts = data.counts || { fish: 0, reefs: 0, human_divers: 0 };
-    latencyVal.textContent = `${elapsed} ms`;
+    if (latencyVal) latencyVal.textContent = `${elapsed} ms`;
 
-    fishCountVal.textContent = state.counts.fish || 0;
-    reefCountVal.textContent = state.counts.reefs || 0;
-    diverCountVal.textContent = state.counts.human_divers || 0;
+    if (fishCountVal) fishCountVal.textContent = state.counts.fish || 0;
+    if (reefCountVal) reefCountVal.textContent = state.counts.reefs || 0;
+    if (diverCountVal) diverCountVal.textContent = state.counts.human_divers || 0;
 
     // Update Community Metrics (Biomass, Catch, Shannon Diversity)
     if (data.community_metrics) {
@@ -300,7 +363,25 @@ async function runSegmentation() {
       if (shannonVal) shannonVal.textContent = cm.shannon_diversity_index.toFixed(2);
     }
 
-    viewStatus.textContent = `Completed: ${state.detections.length} total segments identified (${data.model_title} | Mode: ${data.classifier_mode})`;
+    if (runClassify) {
+      state.isClassified = true;
+      if (classifyBadge) {
+        classifyBadge.textContent = 'Classified';
+        classifyBadge.style.color = '#10b981';
+        classifyBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+      }
+      if (classifyBtnText) classifyBtnText.textContent = 'Re-Identify Species';
+    } else {
+      state.isClassified = false;
+      if (classifyBadge) {
+        classifyBadge.textContent = 'On-Demand';
+        classifyBadge.style.color = 'var(--accent-cyan)';
+        classifyBadge.style.background = 'rgba(56, 189, 248, 0.08)';
+      }
+      if (classifyBtnText) classifyBtnText.textContent = 'Run Identification (Species ID)';
+    }
+
+    viewStatus.textContent = `Completed in ${elapsed}ms: ${state.detections.length} total segments (${data.model_title}${runClassify ? ' • Mode: ' + data.classifier_mode : ''})`;
 
     render();
     updateSidebar();
@@ -310,13 +391,15 @@ async function runSegmentation() {
     viewStatus.textContent = `Error: ${err.message}`;
   } finally {
     setLoading(false);
+    if (classifySpinner) classifySpinner.style.display = 'none';
+    if (classifyBtn) classifyBtn.disabled = false;
   }
 }
 
 function setLoading(isLoading) {
   canvasLoader.style.display = isLoading ? 'flex' : 'none';
   btnSpinner.style.display = isLoading ? 'inline-block' : 'none';
-  btnText.textContent = isLoading ? 'Computing...' : '⚡ Run Instance Segmentation';
+  btnText.textContent = isLoading ? 'Computing...' : 'Re-Run Segmentation';
   runBtn.disabled = isLoading;
 }
 
@@ -385,39 +468,39 @@ function drawBadge(det, palette, isActive) {
     }
   });
 
-  let label = `${det.class_name.toUpperCase()} (${Math.round(det.confidence * 100)}%)`;
-  let subText = `${Math.round(det.oriented_length_px)}px length | ${Math.round(det.area_px)}px²`;
+  let label = `${det.class_name.toUpperCase()} ${Math.round(det.confidence * 100)}%`;
+  let subText = `${Math.round(det.oriented_length_px)}px • ${Math.round(det.area_px)}px²`;
 
   if (det.taxonomy && det.taxonomy.family) {
-    const fam = det.taxonomy.family.toUpperCase();
+    const fam = det.taxonomy.family;
     const cname = det.taxonomy.common_name ? ` (${det.taxonomy.common_name})` : '';
     const taxConf = Math.round((det.taxonomy.confidence || 0) * 100);
     label = `${fam}${cname} ${taxConf}%`;
     if (det.biomass && det.biomass.fork_length_cm) {
-      subText = `L=${det.biomass.fork_length_cm}cm | W=${det.biomass.biomass_g}g`;
+      subText = `L=${det.biomass.fork_length_cm}cm • W=${det.biomass.biomass_g}g`;
     }
   }
 
   ctx.save();
-  ctx.font = 'bold 11px Outfit, sans-serif';
-  const width = Math.max(ctx.measureText(label).width, ctx.measureText(subText).width) + 16;
-  const height = 30;
-  const x = Math.max(8, topX - width / 2);
-  const y = Math.max(8, topY - height - 6);
+  ctx.font = '500 11px Outfit, sans-serif';
+  const width = Math.max(ctx.measureText(label).width, ctx.measureText(subText).width) + 14;
+  const height = 28;
+  const x = Math.max(6, topX - width / 2);
+  const y = Math.max(6, topY - height - 4);
 
-  ctx.fillStyle = isActive ? 'rgba(5, 15, 25, 0.95)' : palette.labelBg;
-  ctx.strokeStyle = isActive ? '#ffffff' : palette.stroke;
+  ctx.fillStyle = isActive ? 'rgba(7, 13, 24, 0.95)' : palette.labelBg;
+  ctx.strokeStyle = isActive ? '#38bdf8' : palette.stroke;
   ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.roundRect(x, y, width, height, 5);
+  ctx.roundRect(x, y, width, height, 4);
   ctx.fill();
   ctx.stroke();
 
-  ctx.fillStyle = '#ffffff';
-  ctx.fillText(label, x + 8, y + 13);
-  ctx.font = '10px JetBrains Mono, monospace';
+  ctx.fillStyle = '#f8fafc';
+  ctx.fillText(label, x + 7, y + 12);
+  ctx.font = '400 9px JetBrains Mono, monospace';
   ctx.fillStyle = palette.stroke;
-  ctx.fillText(subText, x + 8, y + 25);
+  ctx.fillText(subText, x + 7, y + 23);
   ctx.restore();
 }
 
@@ -436,78 +519,57 @@ function updateSidebar() {
     card.className = `instance-card ${det.id === state.selectedId ? 'selected' : ''}`;
     card.id = `card-${det.id}`;
 
-    const palette = PALETTES[det.class_name] || PALETTES.fish;
+    const modelTag = det.source === 'finetuned' ? 'Fine-Tuned' : (det.source === 'yolov8' ? 'COCO' : 'Baseline');
+    const scaleTag = det.scale === 'micro' ? 'Micro' : 'Macro';
 
-    const sourceBadge = det.source === 'consensus'
-      ? `<span style="background: rgba(0, 255, 179, 0.15); color: #00ffb3; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(0, 255, 179, 0.35); font-weight: 600;">Consensus ✨</span>`
-      : (det.source === 'finetuned'
-        ? `<span style="background: rgba(224, 86, 253, 0.15); color: #e056fd; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(224, 86, 253, 0.35); font-weight: 600;">Fine-Tuned 🎯</span>`
-        : `<span style="background: rgba(103, 232, 249, 0.15); color: #67e8f9; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(103, 232, 249, 0.35); font-weight: 600;">Baseline 🏆</span>`);
-
-    const scaleBadge = det.scale === 'micro'
-      ? `<span style="background: rgba(255, 183, 3, 0.15); color: #ffb703; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid rgba(255, 183, 3, 0.35); font-weight: 600;">Micro 📐</span>`
-      : `<span style="background: rgba(255, 255, 255, 0.08); color: #94a3b8; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; font-weight: 600;">Macro 🔍</span>`;
-
-    // Agreement and Taxonomic Consensus tags
-    let agreementBadge = '';
-    let votePills = '';
-    let taxMetaHtml = '';
-
+    let taxHtml = '';
     if (det.taxonomy) {
       const tax = det.taxonomy;
-      const statusColor = tax.consensus_level === 'high' ? '#34d399' : (tax.consensus_level === 'moderate' ? '#fbbf24' : '#f87171');
-      agreementBadge = `<span style="background: rgba(168, 85, 247, 0.15); color: ${statusColor}; font-size: 0.65rem; padding: 2px 6px; border-radius: 4px; border: 1px solid ${statusColor}44; font-weight: 600;">${tax.agreement_status}</span>`;
-
-      if (tax.model_votes) {
-        votePills = Object.entries(tax.model_votes).map(([mName, predFam]) => {
-          return `<span style="display:inline-block; font-size:0.62rem; background:rgba(255,255,255,0.06); padding:2px 5px; border-radius:3px; margin:2px; color:#cbd5e1;"><strong style="color:#a855f7;">${mName}:</strong> ${predFam}</span>`;
-        }).join('');
-      }
-
-      taxMetaHtml = `
-        <div style="margin-top: 6px; padding: 6px 8px; background: rgba(168, 85, 247, 0.06); border-radius: 6px; border: 1px solid rgba(168, 85, 247, 0.2);">
-          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 3px;">
-            <span style="font-size: 0.72rem; color: #c084fc; font-weight: 600;">Taxon: ${tax.family} (${tax.common_name})</span>
-            <span style="font-size: 0.68rem; color: #94a3b8; font-style: italic;">${tax.scientific_name}</span>
+      taxHtml = `
+        <div style="margin-top: 6px; padding: 6px 8px; background: rgba(56, 189, 248, 0.04); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.15);">
+          <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
+            <strong style="font-size: 0.74rem; color: #f8fafc;">${tax.family} ${tax.common_name ? '• ' + tax.common_name : ''}</strong>
+            <span style="font-size: 0.65rem; color: #94a3b8; font-style: italic;">${tax.scientific_name}</span>
           </div>
-          <div style="font-size: 0.65rem; color: #94a3b8; margin-bottom: 4px;">
-            Guild: <strong style="color: #f1f5f9;">${tax.trophic_guild}</strong> | Target: <strong style="color: ${tax.is_commercial ? '#34d399' : '#94a3b8'};">${tax.is_commercial ? 'Commercial Fishery' : 'Ecological'}</strong>
+          <div style="font-size: 0.64rem; color: #94a3b8;">
+            Guild: <span style="color: #cbd5e1;">${tax.trophic_guild}</span> | Fishery: <span style="color: ${tax.is_commercial ? '#10b981' : '#94a3b8'};">${tax.is_commercial ? 'Commercial' : 'Non-Target'}</span>
           </div>
-          ${votePills ? `<div style="display:flex; flex-wrap:wrap; gap:2px; margin-top:3px;">${votePills}</div>` : ''}
+        </div>
+      `;
+    } else if (det.class_name === 'fish') {
+      taxHtml = `
+        <div style="margin-top: 5px; font-size: 0.65rem; color: #64748b;">
+          Taxonomy unassigned • Click 'Run Identification'
         </div>
       `;
     }
 
-    // Morphometrics & Biomass table
     const bioHtml = det.biomass ? `
-      <div class="instance-stats" style="margin-top: 6px; border-top: 1px solid rgba(255,255,255,0.06); padding-top: 6px;">
-        <div><small>Fork Length (L)</small><strong style="color: #34d399;">${det.biomass.fork_length_cm} cm</strong></div>
-        <div><small>Body Depth (D)</small><strong style="color: #38bdf8;">${det.biomass.body_depth_cm} cm</strong></div>
-        <div><small>Biomass (W)</small><strong style="color: #fbbf24;">${det.biomass.biomass_g} g</strong></div>
-        <div><small>Aspect (L/D)</small><strong>${det.biomass.aspect_ratio}</strong></div>
+      <div class="instance-grid">
+        <span>Length<strong>${det.biomass.fork_length_cm} cm</strong></span>
+        <span>Depth<strong>${det.biomass.body_depth_cm} cm</strong></span>
+        <span>Biomass<strong>${det.biomass.biomass_g} g</strong></span>
+        <span>Aspect<strong>${det.biomass.aspect_ratio}</strong></span>
       </div>
     ` : `
-      <div class="instance-stats">
-        <div><small>Oriented Length</small><strong>${det.oriented_length_px} px</strong></div>
-        <div><small>Body Depth</small><strong>${det.body_depth_px} px</strong></div>
-        <div><small>Mask Area</small><strong>${det.area_px} px²</strong></div>
-        <div><small>Polygon Points</small><strong>${det.polygon.length} pts</strong></div>
+      <div class="instance-grid">
+        <span>Length<strong>${det.oriented_length_px} px</strong></span>
+        <span>Depth<strong>${det.body_depth_px} px</strong></span>
+        <span>Area<strong>${Math.round(det.area_px)} px²</strong></span>
+        <span>Points<strong>${det.polygon.length}</strong></span>
       </div>
     `;
 
     card.innerHTML = `
       <div class="instance-header">
-        <div style="display: flex; align-items: center; gap: 6px; flex-wrap: wrap;">
-          <span class="instance-class" style="color: ${palette.stroke}">#${det.id} ${det.taxonomy ? det.taxonomy.family : det.class_name}</span>
-          ${sourceBadge}
-          ${scaleBadge}
-          ${agreementBadge}
+        <div class="instance-badges">
+          <span class="instance-title">#${det.id} ${det.taxonomy ? det.taxonomy.family : det.class_name}</span>
+          <span class="pill-badge pill-cyan">${modelTag}</span>
+          <span class="pill-badge">${scaleTag}</span>
         </div>
-        <span class="instance-conf" style="background: ${palette.fill}; color: ${palette.stroke}">
-          ${Math.round(det.confidence * 100)}%
-        </span>
+        <span class="pill-badge pill-green">${Math.round(det.confidence * 100)}%</span>
       </div>
-      ${taxMetaHtml}
+      ${taxHtml}
       ${bioHtml}
     `;
 

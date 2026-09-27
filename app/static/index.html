@@ -3,130 +3,128 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>KAUST Fish Instance Segmentation - Model Testing Portal</title>
+  <title>KAUST Marine Vision - Instance Segmentation & Biomass Portal</title>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css">
-  <link rel="stylesheet" href="/static/css/style.css">
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="css/style.css?v=4">
 </head>
 <body>
-  <!-- File Protocol Warning Banner (Only visible if opened via double-click without server) -->
-  <div id="fileNoticeBanner" style="display: none; background: linear-gradient(90deg, #b91c1c, #991b1b); color: #fff; padding: 10px 18px; font-size: 13px; text-align: center; border-bottom: 1px solid rgba(255,255,255,0.2);">
-    ⚠️ <strong>Notice:</strong> You opened this file directly from disk. To run live GPU model inference, visit the local server: <a href="http://127.0.0.1:8000" style="color: #67e8f9; text-decoration: underline; font-weight: bold; margin-left: 6px;">http://127.0.0.1:8000</a>
-  </div>
-
   <!-- Header Navbar -->
   <header class="navbar">
     <div class="brand">
       <div class="brand-icon">
-        <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
           <path d="M6.5 12c.94-3.46 4.94-6 8.5-6 3.56 0 6.06 2.54 7 6-.94 3.46-3.44 6-7 6s-7.56-2.54-8.5-6z"></path>
           <path d="M18 12l4 4-2-4 2-4-4 4z"></path>
           <circle cx="10" cy="10" r="1.5" fill="currentColor"></circle>
         </svg>
       </div>
       <div>
-        <h1>KAUST Marine Vision Testing Portal</h1>
-        <span class="sub-brand">Active Model: <code id="subBrandModel">YOLO11s-seg (Stage 2 Fine-Tuned)</code></span>
+        <h1>KAUST Marine Vision Platform</h1>
+        <span class="sub-brand">Active Model: <code id="subBrandModel">YOLO11s-seg (Baseline)</code></span>
       </div>
     </div>
     <div class="nav-badges">
-      <span class="badge model-badge">NVIDIA RTX 3050 GPU</span>
-      <span class="badge weights-badge" id="modelStatusBadge">Fine-Tuned (73.4% Precision)</span>
-      <span class="badge live-badge"><span class="pulse-dot"></span> Ready for Inference</span>
+      <span class="badge model-badge">NVIDIA RTX 3050</span>
+      <span class="badge weights-badge" id="modelStatusBadge">Baseline (63.3% mAP50)</span>
+      <span class="badge live-badge"><span class="pulse-dot"></span> Live</span>
     </div>
   </header>
-
 
   <!-- Main Grid Layout -->
   <main class="dashboard-grid">
     
     <!-- Left Sidebar: Controls & Upload -->
     <aside class="sidebar-panel">
-      <!-- 1. Image Input -->
+      <!-- Input Imagery -->
       <div class="card">
-        <h2 class="card-title">1. Input Imagery</h2>
+        <h2 class="card-title">Image Source</h2>
         
         <div class="upload-dropzone" id="dropZone">
           <input type="file" id="fileInput" accept="image/*" style="display:none;">
           <div class="drop-content" onclick="document.getElementById('fileInput').click()">
-            <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"></path>
               <polyline points="17 8 12 3 7 8"></polyline>
               <line x1="12" y1="3" x2="12" y2="15"></line>
             </svg>
-            <span>Upload Test Field Image</span>
-            <small>Drop custom marine photo or click to browse</small>
+            <span>Upload Field Image</span>
+            <small>Drag & drop or click to browse</small>
           </div>
         </div>
 
         <div class="preset-selector">
-          <label>Or Select Validation Sample:</label>
+          <label>Validation Samples</label>
           <div class="preset-grid" id="presetGrid">
             <!-- Dynamically populated sample thumbnails -->
           </div>
         </div>
       </div>
 
-      <!-- 2. Model Inference Settings -->
+      <!-- Segmentation & Model Settings -->
       <div class="card">
-        <h2 class="card-title">2. Detection Controls</h2>
+        <h2 class="card-title">Segmentation Settings</h2>
         
         <!-- Model Version Selector (Step 1 Segmentation) -->
         <div class="control-group">
-          <label for="modelSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: var(--text-secondary);">Stage 1: Segmentation Backbone:</label>
-          <select id="modelSelect" style="width: 100%; background: #030810; border: 1px solid var(--border-color); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none;">
-            <option value="ensemble" selected>👥 Multi-Teacher Ensemble (Baseline + Fine-Tuned)</option>
-            <option value="v2">🏆 Stage 1 Baseline (63.3% mAP, High Recall)</option>
-            <option value="finetuned">⚡ Stage 2 Fine-Tuned (73.4% Fish Precision)</option>
+          <label class="control-label" for="modelSelect">Backbone Architecture</label>
+          <select id="modelSelect" class="form-select">
+            <option value="v2" selected>Baseline (YOLO11s, High Recall)</option>
+            <option value="finetuned">Fine-Tuned (YOLO11s, 73.4% Precision)</option>
+            <option value="yolov8">YOLOv8s-seg (COCO Pretrained - 50 Epochs)</option>
           </select>
         </div>
 
         <!-- Scale-Sliced Tiling Toggle -->
-        <div class="control-group" style="background: rgba(103, 232, 249, 0.05); padding: 8px 10px; border-radius: var(--radius-md); border: 1px solid rgba(103, 232, 249, 0.2); margin-bottom: 12px;">
-          <label class="toggle-item" style="cursor: pointer; display: flex; align-items: center; justify-content: space-between; margin: 0;">
-            <span class="toggle-label" style="font-size: 0.78rem; color: #67e8f9;">
-              <strong>📐 Scale-Sliced Tiling</strong>
-              <small style="display: block; color: var(--text-muted); font-size: 0.68rem; margin-top: 2px;">Macro full-frame + Micro 640px sliding patches</small>
+        <div class="section-box" style="margin-bottom: 10px;">
+          <label class="toggle-item" style="justify-content: space-between;">
+            <span>
+              <strong style="color: var(--text-primary); font-size: 0.76rem;">Scale-Sliced Tiling</strong>
+              <small style="display: block; color: var(--text-muted); font-size: 0.68rem;">Macro 640px full-frame + micro sliding patches</small>
             </span>
             <input type="checkbox" id="toggleTiling">
           </label>
         </div>
 
-        <!-- Stage 2: Multi-Model Taxonomic Classifier Selector -->
-        <div class="control-group" style="background: rgba(168, 85, 247, 0.07); padding: 10px; border-radius: var(--radius-md); border: 1px solid rgba(168, 85, 247, 0.3); margin-bottom: 12px;">
-          <label for="classifierSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: #c084fc; font-weight: 600;">Stage 2: Taxonomic Classifier Engine:</label>
-          <select id="classifierSelect" style="width: 100%; background: #030810; border: 1px solid rgba(168, 85, 247, 0.4); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none;">
-            <option value="ensemble" selected>🏆 Multi-Model Ensemble (Soft-Voting: YOLO + ConvNeXt + Swin + MobileNet)</option>
-            <option value="swin">🔷 Swin-Tiny Transformer (98.89% Top-1 Acc)</option>
-            <option value="mobilenetv4">⚡ MobileNetV4-Small (98.00% Top-1 Acc)</option>
-            <option value="convnext">🔶 ConvNeXt-Tiny (97.33% Top-1 Acc)</option>
-            <option value="yolo">🟢 YOLO11s-cls (99.78% Top-1 Acc)</option>
+        <!-- Stage 2: Taxonomic Classifier (On-Demand) -->
+        <div class="section-box" style="margin-bottom: 10px;">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 6px;">
+            <label class="control-label" for="classifierSelect" style="margin-bottom: 0;">Taxonomic Classifier</label>
+            <span id="classifyBadge" class="mono-badge" style="font-size: 0.62rem; color: var(--accent-cyan);">On-Demand</span>
+          </div>
+          <select id="classifierSelect" class="form-select" style="margin-bottom: 8px;">
+            <option value="ensemble" selected>Multi-Model Ensemble (Soft Voting)</option>
+            <option value="swin">Swin-Tiny Transformer (98.9%)</option>
+            <option value="mobilenetv4">MobileNetV4-Small (98.0%)</option>
+            <option value="convnext">ConvNeXt-Tiny (97.3%)</option>
+            <option value="yolo">YOLO11s-cls (99.8%)</option>
           </select>
-          <small style="display: block; color: var(--text-muted); font-size: 0.68rem; margin-top: 4px;">Runs parallel consensus & agreement voting per fish crop</small>
+          <button type="button" class="btn btn-secondary" id="classifyBtn">
+            <span id="classifySpinner" class="btn-spinner" style="display: none;"></span>
+            <span id="classifyBtnText">Run Identification (Species ID)</span>
+          </button>
         </div>
 
-        <!-- Stage 3: Physical Calibration & Biomass Controls (Option 1) -->
-        <div class="control-group" style="background: rgba(16, 185, 129, 0.06); padding: 10px; border-radius: var(--radius-md); border: 1px solid rgba(16, 185, 129, 0.25); margin-bottom: 12px;">
-          <label for="presetSelect" style="display:block; margin-bottom: 6px; font-size: 0.78rem; color: #34d399; font-weight: 600;">Stage 3: Sizing & Biomass Rig (Option 1):</label>
-          <select id="presetSelect" style="width: 100%; background: #030810; border: 1px solid rgba(16, 185, 129, 0.4); color: #fff; padding: 7px 10px; border-radius: var(--radius-md); font-family: var(--font-sans); font-size: 0.78rem; outline: none; margin-bottom: 8px;">
+        <!-- Calibration & Biomass -->
+        <div class="section-box">
+          <label class="control-label" for="presetSelect">Physical Calibration</label>
+          <select id="presetSelect" class="form-select" style="margin-bottom: 8px;">
             <option value="custom" selected>Custom Calibration Scale</option>
-            <option value="bruvs_rig">🎥 In-Situ BRUVs Rig (Dr. Renato Morais) - 22 px/cm</option>
-            <option value="measuring_board">📏 Catch Measuring Board (Dr. Jessica Zamborain) - 35 px/cm</option>
+            <option value="bruvs_rig">In-Situ BRUVs Rig - 22 px/cm</option>
+            <option value="measuring_board">Catch Measuring Board - 35 px/cm</option>
           </select>
 
-          <div class="slider-header" style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
-            <label for="scaleSlider" style="font-size: 0.74rem; color: var(--text-secondary);">Scale Ratio (px / cm):</label>
-            <span id="scaleValue" class="mono-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399;">25.0</span>
+          <div class="slider-header">
+            <span>Scale Ratio (px / cm):</span>
+            <span id="scaleValue" class="mono-badge">25.0</span>
           </div>
           <input type="range" id="scaleSlider" min="10.0" max="60.0" step="1.0" value="25.0">
-          <small style="display: block; color: var(--text-muted); font-size: 0.68rem; margin-top: 4px;">FishBase Allometric Conversion: <em>W = a · (L)^b</em></small>
         </div>
 
-        <div class="control-group">
+        <div class="control-group" style="margin-top: 10px;">
           <div class="slider-header">
-            <label for="confSlider">Confidence Threshold:</label>
+            <span>Confidence Threshold:</span>
             <span id="confValue" class="mono-badge">0.35</span>
           </div>
           <input type="range" id="confSlider" min="0.10" max="0.80" step="0.05" value="0.35">
@@ -134,21 +132,20 @@
 
         <!-- Class Filter Toggles -->
         <div class="filter-box">
-          <span class="filter-title">Display Classes:</span>
           <label class="toggle-item">
             <input type="checkbox" id="showFish" checked>
             <span class="class-dot dot-fish"></span>
-            <span class="toggle-label"><strong>Fish (Target Organism)</strong></span>
+            <span>Target Fish</span>
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="showReefs">
             <span class="class-dot dot-reefs"></span>
-            <span class="toggle-label">Reefs (Coral Substrate)</span>
+            <span>Reef Substrate</span>
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="showDivers">
             <span class="class-dot dot-divers"></span>
-            <span class="toggle-label">Human Divers</span>
+            <span>Human Divers</span>
           </label>
         </div>
 
@@ -156,43 +153,22 @@
         <div class="style-box">
           <label class="toggle-item">
             <input type="checkbox" id="toggleOutlines" checked>
-            <span class="toggle-label">Neon Contour Glow</span>
+            <span>Contour Boundaries</span>
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="toggleMasks" checked>
-            <span class="toggle-label">Translucent Mask Fill</span>
+            <span>Translucent Mask Fill</span>
           </label>
           <label class="toggle-item">
             <input type="checkbox" id="toggleBadges" checked>
-            <span class="toggle-label">Labels, Length & Biomass</span>
+            <span>Labels & Sizing Tags</span>
           </label>
         </div>
 
-        <button class="btn btn-primary" id="runBtn">
+        <button class="btn btn-primary" id="runBtn" style="margin-top: 4px;">
           <span class="btn-spinner" id="btnSpinner" style="display: none;"></span>
-          <span id="btnText">⚡ Run Instance Segmentation</span>
+          <span id="btnText">Re-Run Segmentation</span>
         </button>
-      </div>
-
-      <!-- Model Stats Card -->
-      <div class="card info-card">
-        <h2 class="card-title">Model Specifications</h2>
-        <div class="stat-row">
-          <span>Backbone:</span>
-          <strong>YOLO11s-seg (9.4M params)</strong>
-        </div>
-        <div class="stat-row">
-          <span>Trained Weights:</span>
-          <strong>best.pt (Epoch 40 Peak)</strong>
-        </div>
-        <div class="stat-row">
-          <span>Fish Mask mAP50:</span>
-          <strong class="highlight-green">63.3%</strong>
-        </div>
-        <div class="stat-row">
-          <span>Diver Rejection:</span>
-          <strong class="highlight-cyan">69.8% Precision</strong>
-        </div>
       </div>
     </aside>
 
@@ -203,7 +179,7 @@
           <span class="view-status" id="viewStatus">Select or upload an image to inspect mask boundaries</span>
         </div>
         <div class="toolbar-right">
-          <button class="btn btn-sm" id="downloadImgBtn">📸 Save Annotated Image</button>
+          <button class="btn btn-sm" id="downloadImgBtn">Export Annotated Image</button>
         </div>
       </div>
 
@@ -211,46 +187,31 @@
         <canvas id="mainCanvas"></canvas>
         <div class="canvas-loader" id="canvasLoader" style="display: none;">
           <div class="spinner"></div>
-          <p>Running YOLO11s-seg GPU Inference...</p>
+          <p>Running segmentation inference...</p>
         </div>
       </div>
 
       <!-- Real-Time Ecological & Morphometrics Bar -->
-      <div class="metrics-bar" style="grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));">
+      <div class="metrics-bar">
         <div class="metric-card">
-          <div class="metric-icon">🐟</div>
-          <div>
-            <span class="metric-title">Fish Count</span>
-            <strong class="metric-value color-fish" id="fishCountVal">0</strong>
-          </div>
-        </div>
-        <div class="metric-card" style="background: rgba(16, 185, 129, 0.08); border-color: rgba(16, 185, 129, 0.3);">
-          <div class="metric-icon">⚖️</div>
-          <div>
-            <span class="metric-title">Total Biomass (W)</span>
-            <strong class="metric-value" style="color: #34d399;" id="totalBiomassVal">0.00 kg</strong>
-          </div>
-        </div>
-        <div class="metric-card" style="background: rgba(245, 158, 11, 0.08); border-color: rgba(245, 158, 11, 0.3);">
-          <div class="metric-icon">🎣</div>
-          <div>
-            <span class="metric-title">Commercial Catch</span>
-            <strong class="metric-value" style="color: #fbbf24;" id="commercialYieldVal">0.00 kg (0%)</strong>
-          </div>
-        </div>
-        <div class="metric-card" style="background: rgba(168, 85, 247, 0.08); border-color: rgba(168, 85, 247, 0.3);">
-          <div class="metric-icon">🌿</div>
-          <div>
-            <span class="metric-title">Diversity Index (H')</span>
-            <strong class="metric-value" style="color: #c084fc;" id="shannonVal">0.00</strong>
-          </div>
+          <span class="metric-title">Fish Count</span>
+          <strong class="metric-value" style="color: var(--color-fish);" id="fishCountVal">0</strong>
         </div>
         <div class="metric-card">
-          <div class="metric-icon">⚡</div>
-          <div>
-            <span class="metric-title">Inference Time</span>
-            <strong class="metric-value" id="latencyVal">-- ms</strong>
-          </div>
+          <span class="metric-title">Total Biomass (W)</span>
+          <strong class="metric-value" style="color: var(--accent-cyan);" id="totalBiomassVal">0.00 kg</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-title">Commercial Catch</span>
+          <strong class="metric-value" style="color: var(--color-reefs);" id="commercialYieldVal">0.00 kg (0%)</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-title">Diversity Index (H')</span>
+          <strong class="metric-value" style="color: #a78bfa;" id="shannonVal">0.00</strong>
+        </div>
+        <div class="metric-card">
+          <span class="metric-title">Latency</span>
+          <strong class="metric-value" style="color: var(--text-secondary);" id="latencyVal">-- ms</strong>
         </div>
       </div>
     </section>
@@ -259,12 +220,13 @@
     <aside class="details-panel">
       <div class="card full-height">
         <div class="details-header">
-          <h2>Segmented Instances (<span id="totalBadge">0</span>)</h2>
+          <h2>Detected Instances</h2>
+          <span id="totalBadge" class="mono-badge">0</span>
         </div>
         
         <div class="fish-list" id="fishList">
           <div class="empty-state">
-            <span>No detections to display.<br>Upload an image or pick a sample on the left.</span>
+            <span>No detections to display.<br>Select a sample or upload an image on the left.</span>
           </div>
         </div>
       </div>
@@ -272,20 +234,13 @@
 
   </main>
 
-  <script>
-    if (window.location.protocol === 'file:') {
-      const banner = document.getElementById('fileNoticeBanner');
-      if (banner) banner.style.display = 'block';
-    }
-  </script>
-  <script src="js/app.js"></script>
+  <script src="js/app.js?v=4"></script>
   <script>
     if (typeof state === 'undefined') {
       const s = document.createElement('script');
-      s.src = '/static/js/app.js';
+      s.src = '/static/js/app.js?v=4';
       document.body.appendChild(s);
     }
   </script>
 </body>
 </html>
-

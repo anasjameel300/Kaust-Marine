@@ -88,11 +88,11 @@ class BiomassEngine:
                 "guild_distribution": {}
             }
 
-        total_weight_grams = sum(d.get("biomass", {}).get("weight_grams", 0.0) for d in fish_detections)
+        total_weight_grams = sum((d.get("biomass") or {}).get("weight_grams", 0.0) for d in fish_detections)
         commercial_weight_grams = sum(
-            d.get("biomass", {}).get("weight_grams", 0.0)
+            (d.get("biomass") or {}).get("weight_grams", 0.0)
             for d in fish_detections
-            if d.get("taxonomy", {}).get("is_commercial", False)
+            if (d.get("taxonomy") or {}).get("is_commercial", False)
         )
 
         total_biomass_kg = round(total_weight_grams / 1000.0, 3)
@@ -104,8 +104,9 @@ class BiomassEngine:
         guild_counts: Dict[str, int] = {}
 
         for d in fish_detections:
-            fam = d.get("taxonomy", {}).get("family", "Unknown")
-            guild = d.get("taxonomy", {}).get("trophic_guild", "General")
+            tax = d.get("taxonomy") or {}
+            fam = tax.get("family", "Reef Fish (Unclassified)")
+            guild = tax.get("trophic_guild", "Generalist")
             family_counts[fam] = family_counts.get(fam, 0) + 1
             guild_counts[guild] = guild_counts.get(guild, 0) + 1
 

@@ -27,20 +27,22 @@ app.add_middleware(
 BASE_DIR = Path(__file__).resolve().parent
 FINETUNED_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_finetune_v1" / "weights" / "best.pt"
 BASELINE_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_fish_seg_v2" / "weights" / "best.pt"
-
-# Default to the Baseline model (Stage 1 v2, 60.2% Recall, Full Mask Coverage)
-WEIGHTS_PATH = BASELINE_PATH if BASELINE_PATH.exists() else FINETUNED_PATH
-
-if not WEIGHTS_PATH.exists():
-    raise FileNotFoundError(f"Model weights not found at {WEIGHTS_PATH}")
+YOLOV8_PATH = BASE_DIR.parent / "runs" / "segment" / "models" / "kaust_yolov8s_seg_v1" / "weights" / "best.pt"
 
 # Device selection: use GPU if available
 device = 0 if torch.cuda.is_available() else "cpu"
-print(f"[Server] Loading production baseline model: {WEIGHTS_PATH} on device={device}...")
-model_v2 = YOLO(str(WEIGHTS_PATH))
-print(f"[Server] Baseline model loaded! Classes: {model_v2.names}")
+loaded_models = {}
 
-loaded_models = {"v2": model_v2}
+# 1. Baseline YOLO11s-seg
+if BASELINE_PATH.exists():
+    print(f"[Server] Loading production baseline model (YOLO11s): {BASELINE_PATH} on device={device}...")
+    model_v2 = YOLO(str(BASELINE_PATH))
+    loaded_models["v2"] = model_v2
+    print(f"[Server] Baseline model loaded! Classes: {model_v2.names}")
+else:
+    model_v2 = None
+
+# 2. Fine-Tuned YOLO11s-seg
 if FINETUNED_PATH.exists():
     print(f"[Server] Loading fine-tuned model: {FINETUNED_PATH}...")
     model_finetuned = YOLO(str(FINETUNED_PATH))
@@ -48,6 +50,18 @@ if FINETUNED_PATH.exists():
     print(f"[Server] Fine-tuned model loaded!")
 else:
     model_finetuned = model_v2
+
+# 3. Newly Trained YOLOv8s-seg (COCO Pretrained, 50 Epochs)
+if YOLOV8_PATH.exists():
+    print(f"[Server] Loading newly trained YOLOv8s-seg (COCO Pretrained): {YOLOV8_PATH}...")
+    model_yolov8 = YOLO(str(YOLOV8_PATH))
+    loaded_models["yolov8"] = model_yolov8
+    print(f"[Server] YOLOv8s-seg model loaded successfully!")
+else:
+    model_yolov8 = model_v2
+
+# Default model reference: Stage 1 Baseline (v2)
+default_model = loaded_models.get("v2") or model_v2 or loaded_models.get("yolov8")
 
 # Step 1: Geometry and Metric Helpers
 def compute_box_metrics(b1, b2):
@@ -72,7 +86,6 @@ def extract_candidates(result, offset_x=0, offset_y=0, source_model="baseline", 
     if boxes is None or masks is None or len(masks.data) == 0:
         return candidates
 
-    kernel = cv2.getStructuringElement(cv2.MORPH_ELLIPSE, (5, 5))
     tile_h, tile_w = result.orig_shape
 
     for i in range(len(boxes)):
@@ -89,35 +102,40 @@ def extract_candidates(result, offset_x=0, offset_y=0, source_model="baseline", 
             float(bx[3] + offset_y)
         ]
 
-        # Extract binary mask
+        # Extract binary mask tensor and resize to original tile resolution
         m_tensor = (masks.data[i].cpu().numpy() * 255).astype(np.uint8)
         if m_tensor.shape[:2] != (tile_h, tile_w):
             m_tensor = cv2.resize(m_tensor, (tile_w, tile_h), interpolation=cv2.INTER_LINEAR)
             m_tensor = (m_tensor > 127).astype(np.uint8) * 255
 
-        # Morphological opening: sever 1-2px noise bridges and dissolve stray coral specks
-        cleaned_mask = cv2.morphologyEx(m_tensor, cv2.MORPH_OPEN, kernel, iterations=1)
-        contours, _ = cv2.findContours(cleaned_mask, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
+        # RETR_EXTERNAL gets outer boundaries of isolated components
+        contours, _ = cv2.findContours(m_tensor, cv2.RETR_EXTERNAL, cv2.CHAIN_APPROX_NONE)
         if not contours:
             continue
-        
+
+        # STRICTLY select the largest connected component (discards small substrate noise specks and eliminates stray bridge lines)
         main_contour = max(contours, key=cv2.contourArea)
-        area_raw = cv2.contourArea(main_contour)
-        if area_raw < 20:
+        if cv2.contourArea(main_contour) < 25:
             continue
 
-        # Sub-pixel smooth polygon (epsilon = 0.5 preserves true anatomical curves)
-        approx = cv2.approxPolyDP(main_contour, 0.5, True)
+        # Gentle curvature-preserving polygon fit (epsilon = 0.75 preserves fine fin curves while eliminating redundant colinear points)
+        approx = cv2.approxPolyDP(main_contour, 0.75, True)
+        if len(approx) < 3:
+            continue
+
         polygon_coords = [
             [round(float(pt[0][0] + offset_x), 1), round(float(pt[0][1] + offset_y), 1)]
             for pt in approx
         ]
 
         poly_np = np.array(polygon_coords, dtype=np.float32)
+        area_px = float(cv2.contourArea(poly_np))
+        if area_px < 20:
+            continue
+
         rect = cv2.minAreaRect(poly_np)
         oriented_length = float(max(rect[1]))
         body_depth = float(min(rect[1]))
-        area_px = float(cv2.contourArea(poly_np))
 
         candidates.append({
             "class_id": cls_id,
@@ -197,19 +215,21 @@ def merge_teacher_consensus(candidates: List[Dict[str, Any]]) -> List[Dict[str, 
 
 def run_step1_inference(
     img: np.ndarray,
-    model_version: str = "ensemble",
+    model_version: str = "v2",
     conf_threshold: float = 0.35,
     enable_tiling: bool = False
 ) -> List[Dict[str, Any]]:
     img_h, img_w = img.shape[:2]
 
-    # Models to run
-    if model_version == "ensemble":
-        active_models = [("baseline", loaded_models.get("v2", model_v2)), ("finetuned", loaded_models.get("finetuned", model_finetuned))]
-    elif model_version == "finetuned":
-        active_models = [("finetuned", loaded_models.get("finetuned", model_finetuned))]
+    # Exactly 3 Stage 1 Segmentation model backbones (Default: Stage 1 Baseline v2)
+    if model_version == "finetuned" and "finetuned" in loaded_models:
+        active_models = [("finetuned", loaded_models["finetuned"])]
+    elif model_version == "yolov8" and "yolov8" in loaded_models:
+        active_models = [("yolov8", loaded_models["yolov8"])]
+    elif model_version == "v2" and "v2" in loaded_models:
+        active_models = [("baseline", loaded_models["v2"])]
     else:
-        active_models = [("baseline", loaded_models.get("v2", model_v2))]
+        active_models = [("baseline", default_model)]
 
     # 1. Macro Full-Frame Pass (Native 640 preserves whole large fish)
     macro_cands: List[Dict[str, Any]] = []
@@ -293,7 +313,14 @@ async def serve_index():
 async def get_samples():
     samples_dir = BASE_DIR / "samples"
     files = sorted([f for f in os.listdir(samples_dir) if f.lower().endswith(('.jpg', '.jpeg', '.png'))])
-    return [{"filename": f, "url": f"/samples/{f}"} for f in files]
+    # Include mtime query string so the user's browser immediately invalidates stale cache
+    return [
+        {
+            "filename": f,
+            "url": f"/samples/{f}?v={int(os.path.getmtime(samples_dir / f))}"
+        }
+        for f in files
+    ]
 
 @app.get("/api/calibration_presets")
 async def get_calibration_presets():
@@ -304,8 +331,9 @@ async def run_segmentation(
     file: UploadFile = File(None),
     sample_name: str = Form(None),
     conf_threshold: float = Form(0.35),
-    model_version: str = Form("ensemble"),
+    model_version: str = Form("v2"),
     enable_tiling: bool = Form(False),
+    run_classification: bool = Form(False),
     classifier_mode: str = Form("ensemble"),
     calibration_preset: str = Form("custom"),
     pixels_per_cm: float = Form(25.0)
@@ -334,7 +362,7 @@ async def run_segmentation(
 
         img_h, img_w = img.shape[:2]
 
-        # Run Step 1 Multi-Teacher & Scale-Slicing Inference Engine
+        # Run Step 1 Instance Segmentation Engine
         detections = run_step1_inference(
             img=img,
             model_version=model_version,
@@ -344,30 +372,38 @@ async def run_segmentation(
 
         counts = {"fish": 0, "reefs": 0, "human_divers": 0}
 
-        # Step 2: Multi-Model Taxonomic Classification & Step 3: Biomass Engine
+        # Step 2: Multi-Model Taxonomic Classification (On-Demand) & Step 3: Biomass Engine
         for d in detections:
             cname = d["class_name"]
             counts[cname] = counts.get(cname, 0) + 1
 
             if cname == "fish":
-                bx = d["box"]
-                x1 = max(0, int(bx[0]))
-                y1 = max(0, int(bx[1]))
-                x2 = min(img_w, int(bx[2]))
-                y2 = min(img_h, int(bx[3]))
+                if run_classification:
+                    bx = d["box"]
+                    x1 = max(0, int(bx[0]))
+                    y1 = max(0, int(bx[1]))
+                    x2 = min(img_w, int(bx[2]))
+                    y2 = min(img_h, int(bx[3]))
 
-                # Crop fish organism
-                crop = img[y1:y2, x1:x2]
-                tax_res = taxonomic_engine.classify_crop(crop, mode=classifier_mode)
-                d["taxonomy"] = tax_res
+                    # Crop fish organism for 4-model classification
+                    crop = img[y1:y2, x1:x2]
+                    tax_res = taxonomic_engine.classify_crop(crop, mode=classifier_mode)
+                    d["taxonomy"] = tax_res
+                    fb_a = tax_res["fb_a"]
+                    fb_b = tax_res["fb_b"]
+                else:
+                    # On initial upload: fast segmentation without heavy classification
+                    d["taxonomy"] = None
+                    fb_a = 0.0200
+                    fb_b = 3.00
 
                 # Compute individual biomass morphometrics
                 bio_res = biomass_engine.calculate_individual_morphometrics(
                     oriented_length_px=d.get("oriented_length_px", 10.0),
                     body_depth_px=d.get("body_depth_px", 5.0),
                     pixels_per_cm=pixels_per_cm,
-                    fb_a=tax_res["fb_a"],
-                    fb_b=tax_res["fb_b"]
+                    fb_a=fb_a,
+                    fb_b=fb_b
                 )
                 d["biomass"] = bio_res
             else:
@@ -377,12 +413,12 @@ async def run_segmentation(
         # Compute Community Ecological Metrics
         community_metrics = biomass_engine.calculate_community_metrics(detections)
 
-        if model_version == "ensemble":
-            model_title = "Multi-Teacher Ensemble (Consensus: Baseline + Fine-Tuned)"
+        if model_version == "yolov8":
+            model_title = "YOLOv8s-seg (COCO Pretrained - 50 Epochs)"
         elif model_version == "finetuned":
-            model_title = "Stage 2 Fine-Tuned (73.4% Fish Precision)"
+            model_title = "Stage 2 Fine-Tuned (YOLO11s, 73.4% Fish Precision)"
         else:
-            model_title = "Stage 1 Baseline (63.3% Mask mAP50)"
+            model_title = "Stage 1 Baseline (YOLO11s, 63.3% Mask mAP50)"
 
         return JSONResponse({
             "image_url": image_url,
@@ -390,6 +426,7 @@ async def run_segmentation(
             "image_height": img_h,
             "model_version": model_version,
             "model_title": model_title,
+            "run_classification": run_classification,
             "classifier_mode": classifier_mode,
             "calibration_preset": calibration_preset,
             "pixels_per_cm": pixels_per_cm,

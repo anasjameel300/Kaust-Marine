@@ -475,7 +475,8 @@ function drawBadge(det, palette, isActive) {
     const fam = det.taxonomy.family;
     const cname = det.taxonomy.common_name ? ` (${det.taxonomy.common_name})` : '';
     const taxConf = Math.round((det.taxonomy.confidence || 0) * 100);
-    label = `${fam}${cname} ${taxConf}%`;
+    const isVer = det.taxonomy.is_verified !== false;
+    label = isVer ? `${fam}${cname} ${taxConf}%` : `Unverified (Guess: ${fam} ${taxConf}%)`;
     if (det.biomass && det.biomass.fork_length_cm) {
       subText = `L=${det.biomass.fork_length_cm}cm • W=${det.biomass.biomass_g}g`;
     }
@@ -525,15 +526,19 @@ function updateSidebar() {
     let taxHtml = '';
     if (det.taxonomy) {
       const tax = det.taxonomy;
+      const isVer = tax.is_verified !== false;
+      const titleColor = isVer ? '#f8fafc' : '#fbbf24';
+      const statusNotice = isVer
+        ? `<div style="font-size: 0.64rem; color: #94a3b8;">Guild: <span style="color: #cbd5e1;">${tax.trophic_guild}</span> | Fishery: <span style="color: ${tax.is_commercial ? '#10b981' : '#94a3b8'};">${tax.is_commercial ? 'Commercial' : 'Non-Target'}</span></div>`
+        : `<div style="font-size: 0.64rem; color: #fbbf24; margin-top: 2px;">Specimen unverified (confidence &lt; 65% / OOD). Best guess: <strong style="color: #fde68a;">${tax.family}</strong> (${Math.round((tax.confidence || 0) * 100)}%).</div>`;
+
       taxHtml = `
-        <div style="margin-top: 6px; padding: 6px 8px; background: rgba(56, 189, 248, 0.04); border-radius: 4px; border: 1px solid rgba(56, 189, 248, 0.15);">
+        <div style="margin-top: 6px; padding: 6px 8px; background: ${isVer ? 'rgba(56, 189, 248, 0.04)' : 'rgba(245, 158, 11, 0.06)'}; border-radius: 4px; border: 1px solid ${isVer ? 'rgba(56, 189, 248, 0.15)' : 'rgba(245, 158, 11, 0.25)'};">
           <div style="display: flex; justify-content: space-between; align-items: baseline; margin-bottom: 2px;">
-            <strong style="font-size: 0.74rem; color: #f8fafc;">${tax.family} ${tax.common_name ? '• ' + tax.common_name : ''}</strong>
+            <strong style="font-size: 0.74rem; color: ${titleColor};">${isVer ? `${tax.family} ${tax.common_name ? '• ' + tax.common_name : ''}` : `Unverified Specimen (Guess: ${tax.family})`}</strong>
             <span style="font-size: 0.65rem; color: #94a3b8; font-style: italic;">${tax.scientific_name}</span>
           </div>
-          <div style="font-size: 0.64rem; color: #94a3b8;">
-            Guild: <span style="color: #cbd5e1;">${tax.trophic_guild}</span> | Fishery: <span style="color: ${tax.is_commercial ? '#10b981' : '#94a3b8'};">${tax.is_commercial ? 'Commercial' : 'Non-Target'}</span>
-          </div>
+          ${statusNotice}
         </div>
       `;
     } else if (det.class_name === 'fish') {

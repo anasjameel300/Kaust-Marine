@@ -141,10 +141,33 @@ FAMILY_PROFILES = {
     }
 }
 
-# Image transforms for PyTorch models
+def letterbox_pad(img_bgr: np.ndarray, target_size: int = 224, pad_color: Tuple[int, int, int] = (114, 114, 114)) -> np.ndarray:
+    """
+    Resizes image maintaining original aspect ratio and pads remaining borders
+    with neutral gray (114, 114, 114) to reach exact target_size x target_size.
+    Eliminates artificial stretching or squishing of slender vs deep-bodied fish.
+    """
+    h, w = img_bgr.shape[:2]
+    if h == 0 or w == 0:
+        return np.full((target_size, target_size, 3), pad_color[0], dtype=np.uint8)
+    scale = min(target_size / h, target_size / w)
+    nw, nh = max(1, int(round(w * scale))), max(1, int(round(h * scale)))
+    resized = cv2.resize(img_bgr, (nw, nh), interpolation=cv2.INTER_LINEAR)
+
+    pad_top = (target_size - nh) // 2
+    pad_bottom = target_size - nh - pad_top
+    pad_left = (target_size - nw) // 2
+    pad_right = target_size - nw - pad_left
+
+    padded = cv2.copyMakeBorder(
+        resized, pad_top, pad_bottom, pad_left, pad_right,
+        cv2.BORDER_CONSTANT, value=pad_color
+    )
+    return padded
+
+# Image transforms for PyTorch models (input is already 224x224 letterboxed)
 transform_pipeline = transforms.Compose([
     transforms.ToPILImage(),
-    transforms.Resize((224, 224)),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
 ])
@@ -210,7 +233,9 @@ class MultiModelTaxonomicEngine:
             # Fallback for degenerate crop
             return self._format_result("Pomacentridae", 0.50, {}, "Fallback")
 
-        crop_rgb = cv2.cvtColor(crop_bgr, cv2.COLOR_BGR2RGB)
+        # Letterbox pad the crop to 224x224 to preserve authentic biological aspect ratio
+        crop_padded_bgr = letterbox_pad(crop_bgr, target_size=224)
+        crop_rgb = cv2.cvtColor(crop_padded_bgr, cv2.COLOR_BGR2RGB)
         tensor_img = transform_pipeline(crop_rgb).unsqueeze(0).to(device)
 
         model_probs: Dict[str, np.ndarray] = {}
@@ -252,7 +277,7 @@ class MultiModelTaxonomicEngine:
 
         # 4. YOLO11s-cls
         if "yolo" in self.models and (mode in ["ensemble", "yolo"]):
-            # Ultralytics accepts BGR / RGB array directly
+            # Ultralytics accepts letterboxed RGB array directly
             results = self.models["yolo"].predict(crop_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
             if results.probs is not None:
                 probs_data = results.probs.data.cpu().numpy()
@@ -325,6 +350,10 @@ class MultiModelTaxonomicEngine:
             "is_commercial": False
         })
 
+        # Out-Of-Distribution (OOD) & Uncertainty Filter:
+        # If confidence is below 0.65 or consensus is low (split vote), flag as unverified
+        is_verified = bool(confidence >= 0.65 and consensus_level in ["high", "moderate"])
+
         return {
             "family": predicted_family,
             "common_name": profile["common_name"],
@@ -332,6 +361,7 @@ class MultiModelTaxonomicEngine:
             "trophic_guild": profile["trophic_guild"],
             "is_commercial": profile["is_commercial"],
             "confidence": confidence,
+            "is_verified": is_verified,
             "agreement_status": agreement_status,
             "consensus_level": consensus_level,
             "model_votes": model_votes,

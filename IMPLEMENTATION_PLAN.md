@@ -215,8 +215,24 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
 - [x] Replaced non-fish turtle and duplicate presets with 6 verified reef fish samples, adding cache-busting URLs.
 - [x] De-slopped the interface: eliminated cartoon emojis, refined canvas strokes to 1.6px with 18% fill, and implemented a clean scientific obsidian-slate design system.
 
-### Phase 5: Documentation & PI Application Dossier (ACTIVE NEXT STEP)
-- [ ] Prepare tailored research dossier highlighting:
+### Phase 5: Scientific Benchmark: Vision Foundation Models (LoRA) vs. Task-Specific Backbones on Fish-Vista (ACTIVE)
+- [x] Verified *Fish-Vista* paper findings (Mehrab et al., CVPR 2025): zero-shot CLIP/BioCLIP fails on micro-traits; aspect squishing destroys body depth ratios.
+- [x] Integrated letterbox padding (`114, 114, 114`) in `taxonomic_engine.py` to preserve biological morphometrics.
+- [x] Added epistemic uncertainty rejection filter (< 65% confidence flagged as unverified specimen).
+- [x] Authored selective Fish-Vista ingestion script (`scripts/download_fish_vista_10_families.py`) to download only the 10 Red Sea ecological & commercial families with live progress tracking.
+- [ ] Ingest high-resolution, species-rich crops across the 10 families from Fish-Vista (`datasets/fish_vista_10_families`).
+- [ ] Train Parameter-Efficient Fine-Tuning (PEFT/LoRA) adapters on:
+  - **DINOv2-Small (`dinov2_vits14`)**: Low-rank attention adaptation ($r=8$, FP16, VRAM ~3.1 GB).
+  - **BioCLIP (`imageomics/bioclip` ViT-B/16)**: Low-rank attention adaptation ($r=8$, FP16, VRAM ~3.4 GB).
+- [ ] Retrain dedicated task-specific backbones (YOLO11s-cls, Swin-Tiny, MobileNetV4, ConvNeXt-Tiny) on identical Fish-Vista splits.
+- [ ] Evaluate dual-benchmark matrix:
+  - **Controlled In-Domain:** Fish-Vista holdout validation set.
+  - **Real-World Out-of-Domain:** In-situ Red Sea BRUVs video frames and market landed catch photos.
+- [ ] Prototype Dual-Crop Feature Extraction pipeline (Stream A: Global letterbox + Stream B: Cephalic & Caudal peduncle ROIs with cross-attention fusion).
+
+### Phase 6: Documentation & PI Application Dossier (PLANNED)
+- [ ] Prepare tailored research dossier and publication manuscript highlighting:
   - In-situ BRUVs biomass and diversity assessment for **Dr. Renato Morais** (*ROCKNHub*).
   - Landed catch measuring board sizing and commercial yield tracking for **Dr. Jessica Zamborain-Mason** (*Integrated Reef Fisheries Lab*).
+  - Scientific paper manuscript: *"Benchmarking Parameter-Efficient Vision Foundation Models versus Specialized Architectures for Fine-Grained Marine Fish Taxonomy and In-Situ Biomass Estimation"*.
 

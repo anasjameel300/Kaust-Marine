@@ -152,3 +152,40 @@ To reach our final production baseline, we tested multiple segmentation methodol
   - Established a cohesive obsidian-slate palette (`#070b14` background, subtle `#1e293b` borders, refined `#10b981` / `#38bdf8` accents).
   - Reduced canvas polygon strokes to crisp 1.6px lines with an 18% translucent mask fill, keeping natural fish scales and reef textures clearly visible.
   - Replaced crowded sidebar badges with sleek, high-contrast metric grids and status pills.
+
+---
+
+## 8. Scientific Expansion: Fish-Vista Benchmark & Vision Foundation Models (LoRA Adaptation)
+
+### 8.1 Empirical Verification via *Fish-Vista* (Mehrab et al., CVPR 2025)
+* **Scientific Context:** Zero-shot foundation models (CLIP, BioCLIP) fail on fine-grained fish taxonomy because global self-attention and contrastive pooling wash out micro-anatomical traits (e.g. 2mm scalpel spine on *Acanthuridae*, spiny dorsal ray counts and eye-to-head ratios in *Holocentridae*).
+* **Immediate Mitigations Integrated:**
+  1. **Letterbox Padding (`taxonomic_engine.py`):** Replaced aspect-ratio squishing with proportional scaling and neutral gray `(114, 114, 114)` padding to $224 \times 224$, preserving true biological body depth-to-length ratios.
+  2. **Epistemic Uncertainty Gate:** Instances with confidence $< 65\%$ or consensus disagreement are marked as `is_verified = False`, displayed as `"Unverified Specimen (Needs Taxonomic Review) — Best Guess: <Family> (<Confidence>%)"`.
+
+### 8.2 The 10-Family Selective Fish-Vista Ingestion Strategy
+* **Why Replace Fish4Knowledge:** Fish4Knowledge consists of blurry, low-resolution ($80\times 80$ to $120\times 120$) 2011 Taiwanese camera crops, causing artificial camera-noise learning.
+* **The Focused 10-Family Core:** Rather than pulling all 69,269 images across 4,316 species, we ingest only the 10 Red Sea ecological & commercial families (*Acanthuridae*, *Balistidae*, *Chaetodontidae*, *Holocentridae*, *Labridae*, *Lutjanidae*, *Nemipteridae*, *Pomacentridae*, *Scaridae*, *Siganidae*).
+* **Execution Tool:** Authored `scripts/download_fish_vista_10_families.py` to stream and parse metadata CSVs from Hugging Face (`imageomics/fish-vista`), reporting exact species diversity and downloading quota-balanced splits (`train` / `val`) with live progress tracking.
+
+### 8.3 Scientific Benchmark: Parameter-Efficient VFMs (LoRA) vs. Task-Specific Backbones
+To establish a publishable, research-grade comparative study, we formulate an experimental benchmark:
+1. **Vision Foundation Models via PEFT/LoRA:**
+   - **DINOv2-Small (`dinov2_vits14`):** Self-supervised ViT adapted via Low-Rank Adaptation ($r=8, \alpha=16$) on attention projection layers. Fits within ~3.1 GB VRAM on NVIDIA RTX 3050 (4 GB).
+   - **BioCLIP (`imageomics/bioclip` ViT-B/16):** Domain-pretrained on TreeOfLife-10M, adapted via LoRA on visual projection heads.
+2. **Dedicated Task Architectures (Trained from Scratch / ImageNet Warm):**
+   - YOLO11s-cls (CSPDarknet)
+   - Swin-Tiny (Shifted Window ViT)
+   - MobileNetV4-Small (Inverted Residual CNN)
+   - ConvNeXt-Tiny (Modernized 7x7 Depthwise ConvNet)
+3. **Dual-Evaluation Protocol:**
+   - **Benchmark 1 (Controlled / High-Resolution):** Fish-Vista 10-Family holdout validation set.
+   - **Benchmark 2 (Real-World Out-of-Distribution):** In-situ Red Sea BRUVs underwater video and artisanal landed catch photos.
+   - **Ecological Impact Metric:** Quantifying downstream allometric biomass distortion ($\Delta \text{Biomass} = |W_{\text{predicted}} - W_{\text{true}}|$) caused by taxonomic misclassifications.
+
+### 8.4 Dual-Crop Multi-Region Feature Extraction Concept
+* **Stream A (Global Letterbox Crop):** Full-body silhouette preserving aspect ratio ($L/D$) and gross pigmentation.
+* **Stream B (Diagnostic ROIs):** Automatic anatomical extraction along the oriented minimum bounding axis:
+  - *Cephalic Region (front 35%):* Captures snout angle, jaw structure, and eye diameter ratio.
+  - *Caudal Peduncle Region (rear 25%):* Captures caudal spine morphology and tail geometry.
+* **Fusion Head:** Cross-attention / gated concatenation combining global and micro-trait embeddings prior to classification.

@@ -219,16 +219,18 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
 - [x] Verified *Fish-Vista* paper findings (Mehrab et al., CVPR 2025): zero-shot CLIP/BioCLIP fails on micro-traits; aspect squishing destroys body depth ratios.
 - [x] Integrated letterbox padding (`114, 114, 114`) in `taxonomic_engine.py` to preserve biological morphometrics.
 - [x] Added epistemic uncertainty rejection filter (< 65% confidence flagged as unverified specimen).
-- [x] Authored selective Fish-Vista ingestion script (`scripts/download_fish_vista_10_families.py`) to download only the 10 Red Sea ecological & commercial families with live progress tracking.
-- [ ] Ingest high-resolution, species-rich crops across the 10 families from Fish-Vista (`datasets/fish_vista_10_families`).
-- [ ] Train Parameter-Efficient Fine-Tuning (PEFT/LoRA) adapters on:
+- [x] Authored selective Fish-Vista ingestion script (`scripts/download_fish_vista_10_families.py`) and downloaded 10 Red Sea families (`1,443` train, `365` val crops).
+- [x] Trained and verified dedicated traditional baselines on Fish-Vista:
+  - **YOLO11s-cls:** **95.34%** Top-1 Val Acc (epoch 17/22).
+  - **ResNet50d:** **97.81%** Top-1 Val Acc, **99.73%** Top-5 Val Acc (epoch 19).
+- [ ] **Step 1 (Active):** Train Parameter-Efficient Fine-Tuning (PEFT/LoRA) adapters on:
   - **DINOv2-Small (`dinov2_vits14`)**: Low-rank attention adaptation ($r=8$, FP16, VRAM ~3.1 GB).
   - **BioCLIP (`imageomics/bioclip` ViT-B/16)**: Low-rank attention adaptation ($r=8$, FP16, VRAM ~3.4 GB).
-- [ ] Retrain dedicated task-specific backbones (YOLO11s-cls, Swin-Tiny, MobileNetV4, ConvNeXt-Tiny) on identical Fish-Vista splits.
-- [ ] Evaluate dual-benchmark matrix:
+- [ ] **Step 2:** Evaluate dual-benchmark matrix:
   - **Controlled In-Domain:** Fish-Vista holdout validation set.
   - **Real-World Out-of-Domain:** In-situ Red Sea BRUVs video frames and market landed catch photos.
-- [ ] Prototype Dual-Crop Feature Extraction pipeline (Stream A: Global letterbox + Stream B: Cephalic & Caudal peduncle ROIs with cross-attention fusion).
+- [ ] **Step 3:** Prototype Dual-Crop Feature Extraction pipeline (Stream A: Global letterbox + Stream B: Cephalic & Caudal peduncle ROIs with cross-attention fusion).
+- [ ] **Step 4:** Integrate model selector into the web dashboard (`taxonomic_engine.py`).
 
 ### Phase 6: Documentation & PI Application Dossier (PLANNED)
 - [ ] Prepare tailored research dossier and publication manuscript highlighting:

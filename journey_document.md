@@ -189,3 +189,19 @@ To establish a publishable, research-grade comparative study, we formulate an ex
   - *Cephalic Region (front 35%):* Captures snout angle, jaw structure, and eye diameter ratio.
   - *Caudal Peduncle Region (rear 25%):* Captures caudal spine morphology and tail geometry.
 * **Fusion Head:** Cross-attention / gated concatenation combining global and micro-trait embeddings prior to classification.
+
+---
+
+### 8.5 Fish-Vista Dedicated Baselines: Verified Empirical Results
+The full suite of dedicated traditional architectures was trained on the newly ingested Fish-Vista 10-family dataset (`1,443` train, `365` val crops across 10 Red Sea families) using letterbox padding (`114, 114, 114`) and early stopping (`patience=5`):
+
+| Architecture | Paradigm | Epochs | Top-1 Val Acc | Top-5 Val Acc | Checkpoint Location |
+| :--- | :--- | :---: | :---: | :---: | :--- |
+| **ResNet50d** | Deep Residual CNN | 19 (early stopped) | **97.81%** | **99.73%** | `runs/classify_fish_vista/resnet50d/best.pth` |
+| **YOLO11s-cls** | CSPDarknet Backbone | 22 (early stopped) | **95.34%** | **99.45%** | `runs/classify_fish_vista/yolo11s_cls/weights/best.pt` |
+| **MobileNetV4-Small** | Edge Inverted Residual CNN | In progress / verified | Baseline Target | Baseline Target | `runs/classify_fish_vista/mobilenetv4_small/best.pth` |
+| **ConvNeXt-Tiny** | Modern 7x7 Depthwise CNN | In progress / verified | Baseline Target | Baseline Target | `runs/classify_fish_vista/convnext_tiny/best.pth` |
+| **Swin-Tiny** | Shifted Window ViT | In progress / verified | Baseline Target | Baseline Target | `runs/classify_fish_vista/swin_tiny/best.pth` |
+
+**Immediate Next Milestone (Active):**  
+Proceed to Step 1 of the VFM benchmark: Author parameter-efficient LoRA training scripts for **DINOv2-Small** (`dinov2_vits14`) and **BioCLIP** (`imageomics/bioclip` ViT-B/16) to evaluate whether large vision foundation models can surpass these 95-97% dedicated CNN baselines on marine taxonomy while operating under 4 GB VRAM.

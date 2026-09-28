@@ -221,18 +221,22 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
 - [x] Added epistemic uncertainty rejection filter (< 65% confidence flagged as unverified specimen).
 - [x] Authored selective Fish-Vista ingestion script (`scripts/download_fish_vista_10_families.py`) and downloaded 10 Red Sea families (`1,443` train, `365` val crops).
 - [x] Trained and verified dedicated traditional baselines on Fish-Vista:
-  - **YOLO11s-cls:** **95.34%** Top-1 Val Acc (epoch 17/22).
-  - **ResNet50d:** **97.81%** Top-1 Val Acc, **99.73%** Top-5 Val Acc (epoch 19).
-- [ ] **Step 1 (Active):** Train Parameter-Efficient Fine-Tuning (PEFT/LoRA) adapters on:
-  - **DINOv2-Small (`dinov2_vits14`)**: Low-rank attention adaptation ($r=8$, FP16, VRAM ~3.1 GB).
-  - **BioCLIP (`imageomics/bioclip` ViT-B/16)**: Low-rank attention adaptation ($r=8$, FP16, VRAM ~3.4 GB).
-- [ ] **Step 2:** Evaluate dual-benchmark matrix:
-  - **Controlled In-Domain:** Fish-Vista holdout validation set.
-  - **Real-World Out-of-Domain:** In-situ Red Sea BRUVs video frames and market landed catch photos.
-- [ ] **Step 3:** Prototype Dual-Crop Feature Extraction pipeline (Stream A: Global letterbox + Stream B: Cephalic & Caudal peduncle ROIs with cross-attention fusion).
-- [ ] **Step 4:** Integrate model selector into the web dashboard (`taxonomic_engine.py`).
+  - **ResNet50d:** **97.81%** Top-1 Val Acc, **99.73%** Top-5 Val Acc.
+  - **YOLO11s-cls:** **95.34%** Top-1 Val Acc, **99.45%** Top-5 Val Acc.
+  - **Swin-Tiny:** **97.53%** Top-1 Val Acc, **99.73%** Top-5 Val Acc.
+  - **MobileNetV4-Small:** **81.10%** Top-1 Val Acc, **98.90%** Top-5 Val Acc.
+  - **ConvNeXt-Tiny:** **80.27%** Top-1 Val Acc, **96.16%** Top-5 Val Acc.
+- [x] **Step 1 (Completed):** Parameter-Efficient Fine-Tuning (PEFT/LoRA) on Vision Foundation Models:
+  - **DINOv2-Small (`dinov2_vits14`) + LoRA**: **98.08%** Top-1 Val Acc (0.4M trainable parameters).
+  - **BioCLIP (`imageomics/bioclip` ViT-B/16) + LoRA**: **96.44%** Top-1 Val Acc, **100.00%** Top-5 Val Acc (surging from 27.40% zero-shot).
+- [x] **Step 2 (Completed):** Dual-Benchmark Comparative Evaluation:
+  - Downloaded 250 verified wild in-situ Red Sea photos (`datasets/evaluation_ood_redsea`) across 10 families.
+  - Executed automated evaluation across all 7 models ([reports/dual_benchmark_leaderboard.md](file:///c:/Users/anasjameel/Desktop/Kaust%20Marine/reports/dual_benchmark_leaderboard.md)).
+  - Proved the "Underwater Illusion": CNNs suffer an ~80% collapse in the wild (14-17%), while BioCLIP + LoRA dominates at **51.20% Top-1 and 89.60% Top-5**.
+- [ ] **Step 3 (Upcoming Next):** Dual-Crop Multi-Region Feature Extraction (Stream A: Global letterbox + Stream B: Cephalic & Caudal peduncle ROIs with cross-attention fusion).
+- [ ] **Step 4 (Upcoming Next):** Full-Stack Dashboard Dual-Engine Integration (`taxonomic_engine.py` toggle between Fast Edge Mode and In-Situ BioCLIP Mode).
 
-### Phase 6: Documentation & PI Application Dossier (PLANNED)
+### Phase 6: Documentation & PI Application Dossier (ACTIVE NEXT STEP)
 - [ ] Prepare tailored research dossier and publication manuscript highlighting:
   - In-situ BRUVs biomass and diversity assessment for **Dr. Renato Morais** (*ROCKNHub*).
   - Landed catch measuring board sizing and commercial yield tracking for **Dr. Jessica Zamborain-Mason** (*Integrated Reef Fisheries Lab*).

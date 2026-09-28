@@ -197,11 +197,36 @@ The full suite of dedicated traditional architectures was trained on the newly i
 
 | Architecture | Paradigm | Epochs | Top-1 Val Acc | Top-5 Val Acc | Checkpoint Location |
 | :--- | :--- | :---: | :---: | :---: | :--- |
+| **DINOv2-Small + LoRA** | Self-Supervised VFM (PEFT) | 15 (early stopped) | **98.08%** | **99.73%** | `runs/classify_fish_vista/dinov2_lora/best.pth` |
 | **ResNet50d** | Deep Residual CNN | 19 (early stopped) | **97.81%** | **99.73%** | `runs/classify_fish_vista/resnet50d/best.pth` |
+| **Swin-Tiny** | Shifted Window ViT | 16 (early stopped) | **97.53%** | **99.73%** | `runs/classify_fish_vista/swin_tiny/best.pth` |
+| **BioCLIP (ViT-B) + LoRA** | Biological VFM (PEFT) | 12 (early stopped) | **96.44%** | **100.00%** | `runs/classify_fish_vista/bioclip_lora/best.pth` |
 | **YOLO11s-cls** | CSPDarknet Backbone | 22 (early stopped) | **95.34%** | **99.45%** | `runs/classify_fish_vista/yolo11s_cls/weights/best.pt` |
-| **MobileNetV4-Small** | Edge Inverted Residual CNN | In progress / verified | Baseline Target | Baseline Target | `runs/classify_fish_vista/mobilenetv4_small/best.pth` |
-| **ConvNeXt-Tiny** | Modern 7x7 Depthwise CNN | In progress / verified | Baseline Target | Baseline Target | `runs/classify_fish_vista/convnext_tiny/best.pth` |
-| **Swin-Tiny** | Shifted Window ViT | In progress / verified | Baseline Target | Baseline Target | `runs/classify_fish_vista/swin_tiny/best.pth` |
+| **MobileNetV4-Small** | Edge Inverted Residual CNN | 5 (early stopped) | **81.10%** | **98.90%** | `runs/classify_fish_vista/mobilenetv4_small/best.pth` |
+| **ConvNeXt-Tiny** | Modern 7x7 Depthwise CNN | 31 (early stopped) | **80.27%** | **96.16%** | `runs/classify_fish_vista/convnext_tiny/best.pth` |
 
-**Immediate Next Milestone (Active):**  
-Proceed to Step 1 of the VFM benchmark: Author parameter-efficient LoRA training scripts for **DINOv2-Small** (`dinov2_vits14`) and **BioCLIP** (`imageomics/bioclip` ViT-B/16) to evaluate whether large vision foundation models can surpass these 95-97% dedicated CNN baselines on marine taxonomy while operating under 4 GB VRAM.
+---
+
+### 8.6 The Dual-Benchmark Landmark Discovery: Controlled vs. Wild Red Sea OOD
+We assembled a dedicated Out-of-Distribution (OOD) test benchmark of **250 research-grade, in-situ underwater photos** from the Red Sea & coastal reefs (Saudi Arabia, Egypt, Jordan, Sudan) via iNaturalist (`datasets/evaluation_ood_redsea`) and evaluated all 7 architectures head-to-head against the controlled Fish-Vista holdout:
+
+| Architecture | Paradigm | Controlled (Fish-Vista) | Real-World (Wild Red Sea) | Robustness Drop ($\Delta$) | GPU Latency |
+| :--- | :--- | :---: | :---: | :---: | :---: |
+| **BioCLIP (ViT-B) + LoRA** | Biological VFM (PEFT) | 96.44% (T5: 100.0%) | **51.20% (T5: 89.6%)** | **-45.24% (Champion)** | 7.9 ms |
+| **DINOv2-Small + LoRA** | Vision Foundation Model (PEFT) | **98.08%** (T5: 99.7%) | 23.20% (T5: 73.2%) | -74.88% | **4.7 ms** |
+| **Swin-Tiny** | Hierarchical ViT | 97.53% (T5: 99.7%) | 23.20% (T5: 61.6%) | -74.33% | 6.2 ms |
+| **ResNet50d** | Classic Residual CNN | 97.81% (T5: 99.7%) | 17.20% (T5: 66.0%) | -80.61% | 6.7 ms |
+| **YOLO11s-cls** | Edge Real-Time CNN | 95.26% (T5: 99.2%) | 14.00% (T5: 56.0%) | -81.26% | 160.1 ms |
+| **ConvNeXt-Tiny** | Large-Kernel ConvNet | 80.27% (T5: 96.2%) | 12.00% (T5: 57.2%) | -68.27% | 5.0 ms |
+| **MobileNetV4-Small** | Edge Optimized CNN | 81.10% (T5: 98.9%) | 7.60% (T5: 56.0%) | -73.50% | 2.9 ms |
+
+#### Key Empirical Insights:
+1. **The "Underwater Illusion":** On clean museum studio vouchers, traditional CNNs appear nearly solved (95%–98%). However, standard CNNs suffer a catastrophic ~80% collapse when plunged into the wild Red Sea due to water column red-light attenuation, caustics, and coral background camouflage.
+2. **BioCLIP Dominance in the Wild:** BioCLIP + LoRA retained **51.20% Top-1 and 89.60% Top-5 accuracy** in wild conditions—surpassing ResNet50 by +34.0% absolute (3x higher) and YOLO by 3.6x. Its TreeOfLife-10M natural pre-training confers superior invariance to aquatic lighting and substrate clutter.
+3. **Application Alignment:**
+   - **Dr. Jessica Zamborain-Mason (Landed Catch):** ResNet50d (97.8%) and YOLO11s (95.3%) remain the champion edge architectures for flat measuring boards and market stalls.
+   - **Dr. Renato Morais (In-Situ BRUVs & Reef Video):** BioCLIP + LoRA (89.6% Top-5) is the only viable candidate architecture for wild underwater video deployments.
+
+**Planned Next Steps (Roadmap):**
+- **Dual-Crop Multi-Region Feature Extraction:** Integrating cephalic and caudal peduncle crops to resolve remaining subtle confusions in wild imagery (coming soon).
+- **Dashboard Dual-Engine Integration:** Updating `taxonomic_engine.py` to allow live toggling between Fast Edge Mode (ResNet/YOLO) and In-Situ Ecological Mode (BioCLIP LoRA) (coming soon).

@@ -1,0 +1,72 @@
+[
+  {
+    "model": "YOLO11s-cls",
+    "type": "Edge Real-Time CNN",
+    "in_top1": 95.25691699604744,
+    "in_top5": 99.2094861660079,
+    "ood_top1": 14.0,
+    "ood_top5": 56.0,
+    "delta": 81.25691699604744,
+    "latency_ms": 160.05549419449545
+  },
+  {
+    "model": "ResNet50d",
+    "type": "Classic Residual CNN",
+    "in_top1": 97.8082191780822,
+    "in_top5": 99.72602739726027,
+    "ood_top1": 17.2,
+    "ood_top5": 66.0,
+    "delta": 80.6082191780822,
+    "latency_ms": 6.680739763597697
+  },
+  {
+    "model": "MobileNetV4-Small",
+    "type": "Edge Optimized CNN",
+    "in_top1": 81.0958904109589,
+    "in_top5": 98.9041095890411,
+    "ood_top1": 7.6,
+    "ood_top5": 56.0,
+    "delta": 73.4958904109589,
+    "latency_ms": 2.8892585336600467
+  },
+  {
+    "model": "ConvNeXt-Tiny",
+    "type": "Large-Kernel ConvNet",
+    "in_top1": 80.27397260273973,
+    "in_top5": 96.16438356164383,
+    "ood_top1": 12.0,
+    "ood_top5": 57.2,
+    "delta": 68.27397260273973,
+    "latency_ms": 5.035567528020343
+  },
+  {
+    "model": "Swin-Tiny",
+    "type": "Hierarchical ViT",
+    "in_top1": 97.53424657534246,
+    "in_top5": 99.72602739726027,
+    "ood_top1": 23.2,
+    "ood_top5": 61.6,
+    "delta": 74.33424657534246,
+    "latency_ms": 6.217775100135616
+  },
+  {
+    "model": "DINOv2-Small + LoRA",
+    "type": "Vision Foundation Model (PEFT)",
+    "in_top1": 98.08219178082192,
+    "in_top5": 99.72602739726027,
+    "ood_top1": 23.2,
+    "ood_top5": 73.2,
+    "delta": 74.88219178082191,
+    "latency_ms": 4.734247756423371
+  },
+  {
+    "model": "BioCLIP (ViT-B) + LoRA",
+    "type": "Biological VFM (PEFT)",
+    "in_top1": 96.43835616438356,
+    "in_top5": 100.0,
+    "ood_top1": 51.2,
+    "ood_top5": 89.6,
+    "delta": 45.23835616438356,
+    "latency_ms": 7.90202171821227
+  }
+]

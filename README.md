@@ -1,110 +1,108 @@
-# Automated Marine Fish Monitoring & Stock Assessment System
+# Automated Marine Fish Monitoring, Taxonomy & Biomass Assessment Platform
 ### Research-Grade Computer Vision Platform for KAUST VSRP Internship
 
-**Target Research Laboratories at KAUST (Division of Biological and Environmental Science and Engineering - BESE):**
+**Target Laboratories at KAUST (Division of Biological and Environmental Science and Engineering - BESE):**
 * **Dr. Jessica Zamborain-Mason** (*Integrated Reef Fisheries Laboratory*) – *Using AI to Automate Red Sea Fisheries Monitoring*
 * **Dr. Renato Morais** (*Reef–Ocean Connectivity Knowledge Hub / ROCKNHub*) – *Upscaling Marine Fisheries Stock Assessment in the Red Sea*
 
 ---
 
-## 1. Executive Summary & Project Overview
+## 1. Executive Summary & Scientific Overview
 
-This repository houses a unified, production-ready deep learning platform for **automated marine organism instance segmentation, precision morphometrics, and ecological stock assessment**. 
+This repository houses a unified, production-grade deep learning platform for **automated marine organism instance segmentation, fine-grained taxonomic classification, anatomical morphometrics, and allometric stock assessment**.
 
-Designed specifically for the research workflows of **Dr. Jessica Zamborain-Mason** (artisanal catch monitoring & length sizing) and **Dr. Renato Morais** (in-situ BRUVs video surveys & reef biomass production), the system eliminates manual, labor-intensive fish counting and measurement by delivering:
-1. **Sub-pixel Instance Segmentation:** Accurate polygon contours tracing snout-to-tail anatomy against complex coral reef substrate and turbid water columns.
-2. **Diver & Habitat Separation:** Dedicated multi-class discrimination (`fish`, `reefs`, `human_divers`) preventing divers, diving gear, and coral textures from contaminating fish counts.
-3. **Automated Morphometrics:** Dynamic minimum bounding rectangle fitting to compute oriented snout-to-tail fork length and body depth on the fly.
-4. **Interactive Full-Stack Web Portal:** A FastAPI + GPU-accelerated canvas visualizer for immediate drag-and-drop field testing and validation.
+Designed specifically for the research workflows of **Dr. Jessica Zamborain-Mason** (artisanal catch monitoring & length sizing) and **Dr. Renato Morais** (in-situ BRUVs video surveys & reef biomass production), the system provides an end-to-end 3-stage ecological pipeline:
+1. **Stage 1 (Sub-pixel Instance Segmentation):** Clean polygon contours isolating individual organisms from complex coral reef substrate and high-turbidity water columns with dedicated diver/gear rejection (`fish`, `reefs`, `human_divers`).
+2. **Stage 2 (Fine-Grained Taxonomy & Vision Foundation Models):** 10-family marine classification powered by Parameter-Efficient Fine-Tuning (PEFT/LoRA) on Vision Foundation Models (**BioCLIP**, **DINOv2**) and high-resolution convolutional/transformer backbones (**ResNet50d**, **Swin-Tiny**, **YOLO11s-cls**).
+3. **Stage 3 (Dual-Crop Trait Extraction & Allometric Biomass):** Multi-region anatomical trait extraction (Cephalic anterior 35% & Caudal posterior 25%) backed by an **Adaptive Anchor-Preserving Gating** mechanism and dynamic FishBase allometric equations ($W = a \cdot L^b$) computing individual biomass (g), total biomass (kg), commercial yield (%), and Shannon Diversity ($H'$).
 
 ---
 
-## 2. Research Architecture & Methodology
+## 2. Research Architecture & Pipeline
 
 ```text
- ┌──────────────────────────────────────────────────────────────┐
- │             RAW UNDERWATER OR LANDED CATCH INPUT             │
- │          (In-Situ BRUVs Survey OR Artisanal Catch Tray)      │
- └──────────────────────────────┬───────────────────────────────┘
-                                │
-                                ▼
- ┌──────────────────────────────────────────────────────────────┐
- │     CUSTOM YOLO11s-seg INSTANCE SEGMENTATION ENGINE          │
- │    • Backbone: YOLO11s-seg (9.4M parameters)                │
- │    • Clean 3-Class Multi-Head: fish, reefs, human_divers     │
- │    • Natural Background Rejection: Substrate & backscatter   │
- └──────────────────────────────┬───────────────────────────────┘
-                                │
-                                ▼
- ┌──────────────────────────────────────────────────────────────┐
- │         SUB-PIXEL MORPHOMETRICS & POLYGON EXTRACTION         │
- │    • OpenCV Contour Approximation & Area Calculation         │
- │    • Minimum Area Oriented Bounding Box (Snout-to-Tail)      │
- │    • Oriented Length (px) & Body Depth (px)                  │
- └──────────────────────────────┬───────────────────────────────┘
-                                │
-                                ▼
- ┌──────────────────────────────────────────────────────────────┐
- │          ECOLOGICAL SIZING & BIOMASS CONVERSION              │
- │    • Metric Calibration: pixels_per_cm via reference scale   │
- │    • Metric Fork Length: L = length_px / pixels_per_cm       │
- │    • FishBase Allometric Biomass: Weight = a * (Length ^ b)  │
- └──────────────────────────────────────────────────────────────┘
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │                   RAW UNDERWATER OR LANDED CATCH INPUT                 │
+ │                (In-Situ BRUVs Survey OR Artisanal Catch Tray)          │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │           STAGE 1: YOLO11s-seg INSTANCE SEGMENTATION ENGINE            │
+ │   • Backbone: YOLO11s-seg (63.3% mAP50, 60.2% Recall)                  │
+ │   • 3-Class Schema: fish, reefs, human_divers (Rejects divers/benthic)  │
+ │   • Scale-Sliced Tiling (SAHI) for distant/dense organism schools      │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │          STAGE 2: FINE-GRAINED TAXONOMIC CLASSIFICATION (PEFT)         │
+ │   • BioCLIP (ViT-B) + LoRA: In-Situ Wild Champion (89.6% Top-5)        │
+ │   • ResNet50d: Landed Catch Champion (97.8% In-Domain Top-1)           │
+ │   • DINOv2-Small + LoRA (98.1%) & Swin-Tiny (97.5%)                    │
+ │   • Dual-Crop Multi-Region ROIs: Cephalic (35%) & Caudal (25%)         │
+ │   • Adaptive Anchor-Preserving Gating: Shields against fragment noise  │
+ └───────────────────────────────────┬────────────────────────────────────┘
+                                     │
+                                     ▼
+ ┌────────────────────────────────────────────────────────────────────────┐
+ │              STAGE 3: ALLOMETRIC BIOMASS & COMMUNITY ECOLOGY           │
+ │   • Oriented Morphometrics: Snout-to-tail Fork Length & Body Depth     │
+ │   • Physical Calibration: In-Situ BRUVs (22 px/cm) / Tray (35 px/cm)  │
+ │   • FishBase Allometry: W = a * L^b (Family-specific parameters)       │
+ │   • Community Metrics: Total Biomass (kg), Commercial %, Shannon H'    │
+ └────────────────────────────────────────────────────────────────────────┘
 ```
 
 ---
 
-## 3. Dataset & Data Engineering
+## 3. Empirical Landmark Discovery: The "Underwater Illusion"
 
-### Benchmark Dataset
-* **Source:** UIIS (Underwater Image Instance Segmentation) Benchmark & COCO Marine Dataset
-* **Roboflow Benchmark Link:** [Underwater Instance Segmentation v3i (Roboflow Universe)](https://universe.roboflow.com/roboflow-100/underwater-instance-segmentation)
-* **Dataset Scale:** 2,480 training images, 275 validation images across high-turbidity, low-contrast, and complex coral reef habitats.
+We conducted a rigorous head-to-head dual-benchmark evaluation comparing **Controlled Museum Vouchers (Fish-Vista Holdout)** against **Real-World Wild In-Situ Photography (250 research-grade Red Sea photos from iNaturalist across 10 families)**:
 
-### Preprocessing & Class Restructuring Pipeline (`scripts/convert_coco_to_yolo.py`)
-Standard public datasets often suffer from label dilution (diluting weights across robots, seafloor, aquatic plants, and wrecks). To build a reliable system for fisheries science, we engineered a dedicated conversion pipeline:
-* **Target Classes Selected:**
-  * **Class 0 (`fish`):** 9,507 training instances, 917 validation instances.
-  * **Class 1 (`reefs`):** 5,494 training instances, 604 validation instances (acts as a negative attractor against camouflage confusion).
-  * **Class 2 (`human_divers`):** 172 training instances, 26 validation instances (explicitly identifies and rejects divers and equipment).
-* **Noise Filtering:** Distracting non-organism classes (`robots`, `wrecks`, `sea_floor`, `aquatic_plants`) were mapped to background.
-* **Precision Formatting:** All polygon coordinates normalized with 6-decimal floating-point precision for clean mask fitting.
+| Architecture | Paradigm | Controlled (Fish-Vista) | Real-World (Wild Red Sea) | Robustness Drop ($\Delta$) | GPU Latency | Primary PI Alignment |
+| :--- | :--- | :---: | :---: | :---: | :---: | :--- |
+| **BioCLIP (ViT-B) + LoRA** 🏆 | **Biological VFM (PEFT)** | **96.44% (T5: 100%)** | **51.20% (T5: 89.6%)** | **-45.24% (Champion)** | 7.9 ms | **Dr. Renato Morais (In-Situ BRUVs)** |
+| **DINOv2-Small + LoRA** | Vision Foundation (PEFT) | **98.08% (T5: 99.7%)** | 23.20% (T5: 73.2%) | -74.88% | 4.7 ms | General VFM Benchmark |
+| **Swin-Tiny** | Shifted Window ViT | 97.53% (T5: 99.7%) | 23.20% (T5: 61.6%) | -74.33% | 6.2 ms | Hierarchical Feature Benchmark |
+| **ResNet50d** 🏆 | Deep Residual CNN | **97.81% (T5: 99.7%)** | 17.20% (T5: 66.0%) | -80.61% | 6.7 ms | **Dr. Jessica Zamborain-Mason (Catch Boards)** |
+| **YOLO11s-cls** | CSPDarknet Real-Time | 95.26% (T5: 99.2%) | 14.00% (T5: 56.0%) | -81.26% | 160.1 ms | Embedded Low-Power Hardware |
+| **ConvNeXt-Tiny** | 7x7 Depthwise ConvNet | 80.27% (T5: 96.2%) | 12.00% (T5: 57.2%) | -68.27% | 5.0 ms | Pure Convolutional Baseline |
+| **MobileNetV4-Small** | Edge Inverted Residual | 81.10% (T5: 98.9%) | 7.60% (T5: 56.0%) | -73.50% | **2.9 ms** | Ultra-Fast Edge Mobile |
 
----
-
-## 4. Model Training & Performance Benchmarks
-
-All models were trained locally on an **NVIDIA GeForce RTX 3050 Laptop GPU (4 GB VRAM)** with PyTorch 2.6.0+cu124 and Automatic Mixed Precision (AMP).
-
-### Performance Comparison Across Evolution Stages
-
-| Model Checkpoint | Backbone | Strategy | Fish Mask mAP50 | Fish Mask Precision | Fish Mask Recall | Best Use Case |
-| :--- | :---: | :---: | :---: | :---: | :---: | :--- |
-| **Stage 0 (`kaust_fish_seg`)** | YOLO11n-seg | Quick nano trial on unpruned classes | 38.2% | 42.1% | 40.5% | Initial feasibility sanity check. |
-| **Stage 1 Baseline (`kaust_fish_seg_v2`)** 🏆 | **YOLO11s-seg** | **40 Epochs full-scale on clean 3-class dataset** | **63.3%** | **61.2%** | **60.2%** | **Champion Model:** High recall, catches hidden fish, complete snout-to-tail pixel coverage. |
-| **Stage 2 Fine-Tuned (`kaust_fish_seg_finetune_v1`)** | YOLO11s-seg | 25 Epochs warm start, cosine decay, 6-layer freeze | 63.3% | **73.4%** | 51.6% | **High-Precision Checkpoint:** Ultra-low false positives on high-stakes commercial categorization. |
-
-### Why the Stage 1 Baseline (`kaust_fish_seg_v2`) is the Project Champion
-* **High Ecological Recall (60.2%):** In BRUV surveys and artisanal catch monitoring, missing fish artificially deflates biomass stock estimates. The baseline successfully detects faint, distant, and camouflaged individuals.
-* **Full Anatomical Silhouette:** Unlike overly conservative models that clip fins, the baseline captures full body margins necessary for allometric length calculation.
-* **Strong Diver Rejection (69.8% Precision):** Ensures divers and scientific equipment are never falsely counted as fish.
+### Critical Scientific Insights:
+1. **The "Underwater Illusion":** On clean museum studio vouchers, traditional CNNs appear solved ($95\% - 98\%$). However, when plunged into the wild Red Sea, standard CNNs suffer a catastrophic **$\sim 80\%$ collapse** due to water column red-light attenuation, turbidity, and coral camouflage.
+2. **BioCLIP Dominance in the Wild:** BioCLIP + LoRA retained **$51.20\%$ Top-1 and $89.60\%$ Top-5 accuracy in wild conditions**—surpassing ResNet50 by $+34.0\%$ absolute (3x higher). Its TreeOfLife-10M biological pre-training confers superior invariance to aquatic lighting and benthic clutter.
+3. **BioCLIP Zero-Shot Failure Verified:** Out-of-the-box BioCLIP scored only $27.40\%$ zero-shot on Fish-Vista families. Parameter-Efficient LoRA fine-tuning surged it by **$+69.04\%$ to $96.44\%$**, proving the necessity of fine-tuning.
 
 ---
 
-## 5. Interactive Web Testing Portal
+## 4. Dual-Crop Multi-Region Feature Extraction & Adaptive Gating
 
-A complete testing environment is included to allow researchers to upload field photos, inspect polygon contours, and verify model behavior in real time.
+Following the *Fish-Vista* formulation (Mehrab et al., CVPR 2025), the system isolates diagnostic anatomical sub-regions:
+* **Stream A (Global Letterbox):** Aspect-ratio preserved whole-organism view capturing length-to-depth ratio ($L/D$) and overall counter-shading coloration.
+* **Stream B1 (Cephalic ROI - Anterior 35%):** Diagnostic snout angle, eye diameter ratio, and jaw dentition (e.g. parrotfish fused beak plates).
+* **Stream B2 (Caudal Peduncle ROI - Posterior 25%):** Diagnostic caudal spine (e.g. Acanthuridae scalpel marker), peduncle depth, and fin fork geometry.
 
-### Portal Features:
-* **Drag-and-Drop Image Upload:** Drag any field photo or catch tray image for immediate GPU inference.
-* **Validation Presets:** Clickable benchmark images (triggerfish, clownfish in anemone, rock groupers, starfish).
-* **Interactive Overlays:**
-  * Neon contour glow tracing body edges.
-  * Translucent mask fill.
-  * Floating labels displaying class, confidence, oriented length (px), and mask surface area (px²).
-* **Model Checkpoint Switcher:** Seamlessly switch between the **Stage 1 Baseline** and **Stage 2 Fine-Tuned** models on the exact same frame.
-* **Class & Sensitivity Controls:** Toggle visibility for Fish, Reefs, or Divers, and dynamically adjust the confidence threshold slider.
-* **One-Click Export:** Download full-resolution annotated images.
+### Adaptive Anchor-Preserving Gating (Option A):
+Because vision foundation models were trained on full-body organism vouchers, feeding isolated fragments (such as a severed tail fin) without whole-body context can introduce semantic ambiguity (e.g. an isolated Blue Tang tail fin resembling a blue Damselfish).
+* **The Solution:** The system preserves the whole-organism prediction ($P_{\text{global}}$) as the invariant anchor.
+* **Adaptive Reinforcement:** Agreeing sub-crops boost confidence (`Cephalic Validated`, `Anatomical Consensus`), while ambiguous or noisy part predictions are safely gated out. This prevents score dilution and avoids false unverified-specimen misfires.
+* **Scientific Transparency:** The dashboard includes an interactive eye icon (`👁`) on both the control panel and specimen cards explaining the anatomical logic to researchers.
+
+---
+
+## 5. Allometric Biomass & Community Ecology Engine
+
+Using oriented bounding rectangle geometry, each detected fish is measured in calibrated metric units ($cm$):
+
+$$\text{Weight (g)} = a \cdot \text{Length}^{b}$$
+
+Where $a$ and $b$ are allometric scaling parameters dynamically retrieved from FishBase for the classified family:
+* **Total Biomass:** Aggregate biomass in kilograms: $W_{\text{total}} = \sum \frac{W_i}{1000}$
+* **Commercial Yield (%):** Percentage of total biomass belonging to commercial food fish families (e.g. *Lutjanidae*, *Siganidae*, *Scaridae*, *Balistidae*).
+* **Shannon Diversity Index ($H'$):** Ecological community diversity metric based on family relative abundance:
+  $$H' = -\sum_{i=1}^{S} p_i \ln(p_i)$$
 
 ---
 
@@ -113,31 +111,44 @@ A complete testing environment is included to allow researchers to upload field 
 ```text
 Kaust Marine/
 ├── README.md                      # Complete research documentation & user guide
-├── .gitignore                     # Configured to exclude heavy datasets & weights
+├── journey_document.md            # Comprehensive project journal & audit trail
+├── IMPLEMENTATION_PLAN.md         # Phase-by-phase implementation plan
 ├── app/                           # Full-stack testing web application
 │   ├── server.py                  # FastAPI inference backend & model server
+│   ├── taxonomic_engine.py        # Multi-model classification & adaptive gating
+│   ├── dual_crop_engine.py        # Anatomical ROI extraction & fusion
+│   ├── biomass_engine.py          # Metric sizing, FishBase allometry & Shannon H'
 │   ├── samples/                   # Benchmark validation field imagery
 │   └── static/                    # Frontend assets
-│       ├── index.html             # Responsive dashboard layout
+│       ├── index.html             # Responsive obsidian-slate dashboard
 │       ├── css/style.css          # Glassmorphism dark-mode styles
 │       └── js/app.js              # Canvas visualizer & client controller
-├── datasets/                      # Benthic datasets (managed locally via .gitignore)
-│   └── underwater_yolo_seg/       # 3-class normalized YOLO segmentation dataset
-├── runs/segment/models/           # Saved model checkpoints & training curves
-│   ├── kaust_fish_seg_v2/         # 🏆 Production Baseline (40 Epochs, best.pt)
-│   └── kaust_fish_seg_finetune_v1/# ⚡ Fine-Tuned High-Precision Model (best.pt)
-└── scripts/                       # Research pipeline scripts
-    ├── convert_coco_to_yolo.py    # COCO-to-YOLO conversion & class pruning
-    ├── train_yolo_seg.py          # Stage 1 training script with clean progress
-    └── train_finetune.py          # Stage 2 warm fine-tuning script
+├── datasets/                      # Datasets (managed locally via .gitignore)
+│   ├── underwater_yolo_seg/       # 3-class normalized YOLO segmentation dataset
+│   ├── fish_vista_10_families/    # 10-family Fish-Vista museum vouchers (1,808 crops)
+│   └── evaluation_ood_redsea/     # 250 wild in-situ Red Sea evaluation photos
+├── runs/                          # Model weights & training logs
+│   ├── segment/models/kaust_fish_seg_v2/ # 🏆 YOLO11s-seg Champion (best.pt)
+│   └── classify_fish_vista/       # 🏆 7 Fine-Tuned Taxonomic Model Weights
+│       ├── bioclip_lora/best.pth  # BioCLIP + LoRA (In-Situ Wild Champion - 89.6%)
+│       ├── resnet50d/best.pth     # ResNet50d (Landed Catch Champion - 97.8%)
+│       ├── dinov2_lora/best.pth   # DINOv2-Small + LoRA (98.1%)
+│       ├── yolo11s_cls/weights/best.pt # YOLO11s-cls (95.3%)
+│       └── swin_tiny/best.pth     # Swin-Tiny Transformer (97.5%)
+└── scripts/                       # Training, evaluation & download scripts
+    ├── train_bioclip_lora.py      # BioCLIP LoRA fine-tuning & zero-shot script
+    ├── train_dinov2_lora.py       # DINOv2 LoRA fine-tuning script
+    ├── evaluate_dual_benchmark.py # Dual-benchmark evaluation runner
+    ├── download_fish_vista_10_families.py # Fish-Vista selective downloader
+    └── download_redsea_ood_eval.py# Wild Red Sea iNaturalist downloader
 ```
 
 ---
 
-## 7. Quickstart & Installation
+## 7. Quickstart & How to Run
 
 ### 1. Prerequisites
-Ensure you have Python 3.11 installed (recommended via Miniconda) with CUDA support:
+Ensure you have Python 3.11 with CUDA support (recommended via Miniconda):
 
 ```bash
 # Clone the repository
@@ -147,39 +158,23 @@ cd "kaust-marine-vision"
 # Activate the conda environment
 conda activate kaust_marine
 
-# Install required dependencies
-pip install ultralytics fastapi uvicorn python-multipart opencv-python numpy
+# Install dependencies
+pip install ultralytics fastapi uvicorn python-multipart opencv-python numpy timm torchvision open_clip_torch
 ```
 
-### 2. Launch the Interactive Testing Portal
-Run the web application:
+### 2. Launch the Research Portal
+Run the FastAPI web application:
 
 ```powershell
-# Direct execution using Python
-& "C:\Users\anasjameel\miniconda3\envs\kaust_marine\python.exe" -m uvicorn app.server:app --host 127.0.0.1 --port 8000
+python -m uvicorn app.server:app --host 127.0.0.1 --port 8000 --reload
 ```
 
-Open your browser and navigate to:
-**`http://127.0.0.1:8000`**
+Open your browser at: **`http://127.0.0.1:8000`**
 
-### 3. Training Scripts
-* **To train the Stage 1 Baseline from scratch:**
-  ```powershell
-  python scripts/train_yolo_seg.py
-  ```
-* **To run Stage 2 warm fine-tuning:**
-  ```powershell
-  python scripts/train_finetune.py
-  ```
+### 3. Running Dual-Benchmark Evaluations
+To reproduce the dual-benchmark leaderboard across all 7 models:
 
----
-
-## 8. Academic Next Steps & Research Roadmap
-
-1. **Pixel-to-Centimeter Metric Calibration:**
-   * Integrate 2-point reference calibration (e.g. measuring boards for catch monitoring; bait canisters for BRUVs).
-2. **FishBase Allometric Biomass Engine:**
-   * Couple classified fork lengths to species-specific length-weight allometric equations:
-     $$\text{Weight} = a \cdot \text{Length}^b$$
-3. **Red Sea Field Validation:**
-   * Evaluate the model against in-situ Red Sea BRUV video transects and artisanal landing site survey data from the Farasan Islands and Thuwal coastal communities.
+```powershell
+python scripts/evaluate_dual_benchmark.py
+```
+Results will be output to [`reports/dual_benchmark_leaderboard.md`](reports/dual_benchmark_leaderboard.md).

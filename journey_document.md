@@ -251,3 +251,6 @@ We assembled a dedicated Out-of-Distribution (OOD) test benchmark of **250 resea
    - Solved the semantic Out-of-Distribution (OOD) dilution issue where isolated, headless tail crops were penalizing confident full-body predictions.
    - The whole-organism letterbox view ($P_{\text{global}}$) is preserved as the invariant anchor.
    - Cephalic and Caudal ROIs dynamically boost confidence when they corroborate the anchor class, while ambiguous or noisy part predictions are safely gated out, maintaining high classification confidence and preventing unverified-specimen misfires.
+5. **Research Transparency & Interactive Eye Modal (`👁`):**
+   - Integrated an interactive eye indicator (`👁`) in both the sidebar control panel and each organism instance card.
+   - Provides instant scientific context on why isolated sub-crops can exhibit semantic ambiguity on whole-organism backbones and how Adaptive Anchor Gating preserves verification integrity, outlining future end-to-end multi-task part training.

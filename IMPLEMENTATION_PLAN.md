@@ -239,6 +239,9 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
 - [x] **Step 4 (Completed):** Full-Stack Dashboard Integration & Model Suite:
   - Integrated all 7 models into `app/taxonomic_engine.py`, `app/server.py`, and `app/static/`: BioCLIP + LoRA (In-Situ Wild Champion), ResNet50d (Landed Catch Champion), DINOv2-LoRA, YOLO11s-cls, Swin-Tiny, and Scientific Ensemble.
   - Added interactive Dual-Crop ROI visualizer in the specimen cards displaying high-res base64 Cephalic & Caudal thumbnails with anatomical consensus badges.
+- [x] **Step 5 (Completed):** Adaptive Anchor-Preserving Gating & Scientific Transparency Modal (`👁`):
+  - Solved semantic OOD dilution via Option A adaptive gating: the global body remains the invariant anchor ($P_{\text{global}}$); agreeing sub-regions boost confidence while ambiguous isolated parts are safely filtered out.
+  - Integrated interactive research notes modal (`👁`) in both the sidebar control panel and specimen cards detailing the current status, biological motivation, and future multi-task training path.
 
 ### Phase 6: Documentation & PI Application Dossier (ACTIVE NEXT STEP)
 - [ ] Prepare tailored research dossier and publication manuscript highlighting:

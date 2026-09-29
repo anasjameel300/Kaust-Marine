@@ -103,13 +103,16 @@
             <option value="mobilenetv4">MobileNetV4-Small (Universal Edge — 81.1%)</option>
             <option value="convnext">ConvNeXt-Tiny (Modern Pure ConvNet — 80.3%)</option>
           </select>
-          <label class="toggle-item" style="margin-bottom: 8px; font-size: 0.72rem; padding: 4px 6px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.18); border-radius: 4px;">
-            <span>
-              <strong style="color: #38bdf8;">Dual-Crop Multi-Region</strong>
-              <small style="display: block; color: #94a3b8; font-size: 0.62rem;">Cephalic (35%) &amp; Caudal (25%) ROIs (Fish-Vista CVPR)</small>
-            </span>
-            <input type="checkbox" id="toggleDualCrop" checked>
-          </label>
+          <div style="margin-bottom: 8px; font-size: 0.72rem; padding: 4px 6px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.18); border-radius: 4px; display: flex; align-items: center; justify-content: space-between;">
+            <label class="toggle-item" style="margin: 0; padding: 0; border: none; background: none; flex: 1;">
+              <span>
+                <strong style="color: #38bdf8;">Dual-Crop Multi-Region</strong>
+                <small style="display: block; color: #94a3b8; font-size: 0.62rem;">Cephalic (35%) &amp; Caudal (25%) ROIs (Fish-Vista CVPR)</small>
+              </span>
+              <input type="checkbox" id="toggleDualCrop" checked>
+            </label>
+            <button type="button" id="dualCropInfoBtn" style="background: rgba(56, 189, 248, 0.12); border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 4px; color: #38bdf8; cursor: pointer; padding: 2px 7px; font-size: 0.75rem; margin-left: 6px;" title="View Research Notes &amp; Status">👁</button>
+          </div>
           <button type="button" class="btn btn-secondary" id="classifyBtn">
             <span id="classifySpinner" class="btn-spinner" style="display: none;"></span>
             <span id="classifyBtnText">Run Identification (Species ID)</span>
@@ -243,6 +246,46 @@
     </aside>
 
   </main>
+
+  <!-- Dual-Crop Scientific Information Modal -->
+  <div id="dualCropModal" style="display: none; position: fixed; inset: 0; background: rgba(3, 7, 18, 0.82); z-index: 9999; align-items: center; justify-content: center; backdrop-filter: blur(4px);">
+    <div style="background: #0f172a; border: 1px solid rgba(56, 189, 248, 0.3); border-radius: 8px; max-width: 540px; width: 92%; padding: 22px; box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.6); color: #f8fafc; font-family: 'Outfit', sans-serif;">
+      <div style="display: flex; justify-content: space-between; align-items: center; border-bottom: 1px solid rgba(255, 255, 255, 0.1); padding-bottom: 10px; margin-bottom: 14px;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.15rem; color: #38bdf8;">👁</span>
+          <h3 style="margin: 0; font-size: 1.05rem; font-weight: 600; color: #f8fafc;">Dual-Crop Multi-Region Trait Extraction</h3>
+        </div>
+        <button type="button" id="closeDualCropModal" style="background: none; border: none; color: #94a3b8; font-size: 1.2rem; cursor: pointer; padding: 2px 6px;">✕</button>
+      </div>
+
+      <div style="font-size: 0.82rem; line-height: 1.55; color: #cbd5e1;">
+        <p style="margin-top: 0; margin-bottom: 10px;">
+          <strong style="color: #38bdf8;">Methodology (Fish-Vista CVPR 2025):</strong><br>
+          Extracts isolated anatomical sub-regions: <strong>Cephalic ROI (anterior 35%)</strong> for snout angle, jaw dentition, and eye diameter ratio; and <strong>Caudal Peduncle ROI (posterior 25%)</strong> for peduncle depth, caudal spines (scalpel markers), and tail fin geometry.
+        </p>
+
+        <div style="background: rgba(245, 158, 11, 0.08); border-left: 3px solid #f59e0b; padding: 8px 10px; border-radius: 2px; margin-bottom: 10px;">
+          <strong style="color: #fbbf24; font-size: 0.78rem;">Experimental Notice &amp; Semantic Boundary:</strong><br>
+          <span style="font-size: 0.78rem; color: #fde68a;">
+            The active vision backbones (BioCLIP, ResNet, DINOv2) were fine-tuned on whole-organism museum vouchers. When evaluated on severed fragments (such as an isolated tail fin without whole-body context), the network can encounter semantic ambiguity (e.g. an isolated <em>Acanthuridae</em> tail fin resembling a <em>Pomacentridae</em> damselfish).
+          </span>
+        </div>
+
+        <p style="margin-bottom: 10px;">
+          <strong style="color: #34d399;">Implemented Mitigation (Adaptive Anchor-Preserving Gating):</strong><br>
+          The system protects the whole organism ($P_{\text{global}}$) as the primary invariant anchor. Sub-crops only boost confidence when they corroborate the anchor class (labeled <em>Cephalic / Caudal Validated</em>). Conflicting part predictions are safely gated out to prevent confidence dilution, maintaining high verified confidence.
+        </p>
+
+        <p style="margin-bottom: 0; font-size: 0.76rem; color: #94a3b8; border-top: 1px solid rgba(255,255,255,0.08); padding-top: 8px;">
+          <em>Future Enhancement:</em> End-to-end multi-task part fine-tuning on annotated anatomical keypoints directly in the feature latent space.
+        </p>
+      </div>
+
+      <div style="text-align: right; margin-top: 16px;">
+        <button type="button" id="confirmDualCropModal" class="btn btn-secondary" style="padding: 6px 16px; font-size: 0.8rem;">Close</button>
+      </div>
+    </div>
+  </div>
 
   <script src="js/app.js?v=4"></script>
   <script>

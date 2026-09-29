@@ -142,6 +142,28 @@ function setupEventListeners() {
     });
   }
 
+  // Dual-Crop Research Information Modal
+  const dualCropModal = document.getElementById('dualCropModal');
+  const dualCropInfoBtn = document.getElementById('dualCropInfoBtn');
+  const closeDualCropModal = document.getElementById('closeDualCropModal');
+  const confirmDualCropModal = document.getElementById('confirmDualCropModal');
+
+  function openDualCropModal() {
+    if (dualCropModal) dualCropModal.style.display = 'flex';
+  }
+  function closeDualCropModalFn() {
+    if (dualCropModal) dualCropModal.style.display = 'none';
+  }
+
+  if (dualCropInfoBtn) dualCropInfoBtn.addEventListener('click', openDualCropModal);
+  if (closeDualCropModal) closeDualCropModal.addEventListener('click', closeDualCropModalFn);
+  if (confirmDualCropModal) confirmDualCropModal.addEventListener('click', closeDualCropModalFn);
+  if (dualCropModal) {
+    dualCropModal.addEventListener('click', (e) => {
+      if (e.target === dualCropModal) closeDualCropModalFn();
+    });
+  }
+
   if (presetSelect) {
     presetSelect.addEventListener('change', (e) => {
       const p = e.target.value;
@@ -565,7 +587,10 @@ function updateSidebar() {
       roiHtml = `
         <div style="margin-top: 6px; padding: 6px 8px; background: rgba(15, 23, 42, 0.7); border-radius: 4px; border: 1px dashed rgba(56, 189, 248, 0.25);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
-            <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Dual-Crop ROIs (Fish-Vista)</span>
+            <div style="display: flex; align-items: center; gap: 4px;">
+              <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Dual-Crop ROIs</span>
+              <button type="button" class="btn-roi-info" style="background: none; border: none; color: #38bdf8; cursor: pointer; padding: 0 2px; font-size: 0.70rem;" title="View Research Notes &amp; Status" onclick="document.getElementById('dualCropModal').style.display='flex'">👁</button>
+            </div>
             <span style="font-size: 0.58rem; color: ${rois.consensus_color || (rois.anatomical_match ? '#34d399' : '#fbbf24')}; font-weight: 500;">✓ ${rois.consensus_badge || (rois.anatomical_match ? 'Anatomical Consensus' : 'Macro-Anchored')}</span>
           </div>
           <div style="display: flex; gap: 8px;">

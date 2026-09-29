@@ -247,3 +247,7 @@ We assembled a dedicated Out-of-Distribution (OOD) test benchmark of **250 resea
      - **Multi-Region Anatomical Fusion:** Fuses regional logits ($0.55 \cdot P_{\text{global}} + 0.25 \cdot P_{\text{head}} + 0.20 \cdot P_{\text{caudal}}$) to resolve camouflage ambiguities.
 3. **Interactive Visual Dashboard:**
    - Each segmented fish card in the UI displays real-time high-resolution base64 thumbnails of both the Cephalic (Anterior) and Caudal (Posterior) crops alongside regional family predictions and an anatomical consensus verification badge.
+4. **Adaptive Anchor-Preserving Gating (Option A Operational):**
+   - Solved the semantic Out-of-Distribution (OOD) dilution issue where isolated, headless tail crops were penalizing confident full-body predictions.
+   - The whole-organism letterbox view ($P_{\text{global}}$) is preserved as the invariant anchor.
+   - Cephalic and Caudal ROIs dynamically boost confidence when they corroborate the anchor class, while ambiguous or noisy part predictions are safely gated out, maintaining high classification confidence and preventing unverified-specimen misfires.

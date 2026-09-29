@@ -566,7 +566,7 @@ function updateSidebar() {
         <div style="margin-top: 6px; padding: 6px 8px; background: rgba(15, 23, 42, 0.7); border-radius: 4px; border: 1px dashed rgba(56, 189, 248, 0.25);">
           <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
             <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Dual-Crop ROIs (Fish-Vista)</span>
-            <span style="font-size: 0.58rem; color: ${rois.anatomical_match ? '#34d399' : '#fbbf24'};">${rois.anatomical_match ? '✓ Anatomical Consensus' : 'Split Morphology'}</span>
+            <span style="font-size: 0.58rem; color: ${rois.consensus_color || (rois.anatomical_match ? '#34d399' : '#fbbf24')}; font-weight: 500;">✓ ${rois.consensus_badge || (rois.anatomical_match ? 'Anatomical Consensus' : 'Macro-Anchored')}</span>
           </div>
           <div style="display: flex; gap: 8px;">
             <div style="flex: 1; text-align: center; background: rgba(0,0,0,0.35); border-radius: 4px; padding: 4px;">

@@ -182,6 +182,39 @@ transform_clip = transforms.Compose([
     transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
 ])
 
+def apply_adaptive_roi_gating(p_glob: np.ndarray, p_head: Optional[np.ndarray] = None, p_caudal: Optional[np.ndarray] = None) -> np.ndarray:
+    """
+    Adaptive Anchor-Preserving Gating (Option A):
+    - The global full-body distribution (p_glob) acts as the primary anchor.
+    - Sub-region anatomical crops (head, caudal) only reinforce the prediction
+      if they agree with the primary anchor.
+    - If a sub-region is noisy or confused (e.g. an isolated tail fin), it is gated out
+      so it NEVER penalizes or dilutes the confident global organism prediction.
+    """
+    if p_head is None or p_caudal is None:
+        return p_glob.copy()
+
+    p_fused = p_glob.copy()
+    top_idx = int(np.argmax(p_glob))
+
+    # 1. Cephalic Reinforcement (Anterior snout/jaw keypoints)
+    head_top_idx = int(np.argmax(p_head))
+    if head_top_idx == top_idx:
+        head_conf = float(p_head[head_top_idx])
+        p_fused[top_idx] = min(0.99, p_fused[top_idx] + 0.08 * head_conf)
+
+    # 2. Caudal Reinforcement (Posterior peduncle/spine keypoints)
+    caudal_top_idx = int(np.argmax(p_caudal))
+    if caudal_top_idx == top_idx:
+        caudal_conf = float(p_caudal[caudal_top_idx])
+        p_fused[top_idx] = min(0.99, p_fused[top_idx] + 0.06 * caudal_conf)
+
+    # Re-normalize probability distribution
+    sum_val = float(np.sum(p_fused))
+    if sum_val > 0:
+        p_fused = p_fused / sum_val
+    return p_fused
+
 class MultiModelTaxonomicEngine:
     def __init__(self):
         self.models: Dict[str, Any] = {}
@@ -333,7 +366,7 @@ class MultiModelTaxonomicEngine:
                         logits = self.models["bioclip"](batch_clip)
                         probs = F.softmax(logits, dim=1).cpu().numpy()
                         p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
-                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        p_fused = apply_adaptive_roi_gating(p_glob, p_head, p_caudal)
                         head_trait_preds["BioCLIP"] = CLASS_NAMES[int(np.argmax(p_head))]
                         caudal_trait_preds["BioCLIP"] = CLASS_NAMES[int(np.argmax(p_caudal))]
                     else:
@@ -354,7 +387,7 @@ class MultiModelTaxonomicEngine:
                         logits = self.models["resnet50"](batch_img)
                         probs = F.softmax(logits, dim=1).cpu().numpy()
                         p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
-                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        p_fused = apply_adaptive_roi_gating(p_glob, p_head, p_caudal)
                         head_trait_preds["ResNet50d"] = CLASS_NAMES[int(np.argmax(p_head))]
                         caudal_trait_preds["ResNet50d"] = CLASS_NAMES[int(np.argmax(p_caudal))]
                     else:
@@ -375,7 +408,7 @@ class MultiModelTaxonomicEngine:
                         logits = self.models["dinov2"](batch_img)
                         probs = F.softmax(logits, dim=1).cpu().numpy()
                         p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
-                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        p_fused = apply_adaptive_roi_gating(p_glob, p_head, p_caudal)
                         head_trait_preds["DINOv2"] = CLASS_NAMES[int(np.argmax(p_head))]
                         caudal_trait_preds["DINOv2"] = CLASS_NAMES[int(np.argmax(p_caudal))]
                     else:
@@ -396,7 +429,7 @@ class MultiModelTaxonomicEngine:
                         logits = self.models["swin"](batch_img)
                         probs = F.softmax(logits, dim=1).cpu().numpy()
                         p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
-                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        p_fused = apply_adaptive_roi_gating(p_glob, p_head, p_caudal)
                     else:
                         logits = self.models["swin"](tensor_img)
                         p_fused = F.softmax(logits, dim=1).cpu().numpy()[0]
@@ -436,7 +469,7 @@ class MultiModelTaxonomicEngine:
                     p_caudal = np.array([yd.get(c, 0.0) for c in CLASS_NAMES])
                     if p_caudal.sum() > 0: p_caudal = p_caudal / p_caudal.sum()
 
-                p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                p_fused = apply_adaptive_roi_gating(p_glob, p_head, p_caudal)
             else:
                 res_glob = self.models["yolo"].predict(global_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
                 p_fused = np.zeros(len(CLASS_NAMES))
@@ -512,12 +545,30 @@ class MultiModelTaxonomicEngine:
         if enable_dual_crop:
             head_fam = list(head_trait_preds.values())[0] if head_trait_preds else predicted_family
             caudal_fam = list(caudal_trait_preds.values())[0] if caudal_trait_preds else predicted_family
+            head_agrees = bool(head_fam == predicted_family)
+            caudal_agrees = bool(caudal_fam == predicted_family)
+
+            if head_agrees and caudal_agrees:
+                consensus_badge = "Anatomical Consensus"
+                consensus_color = "#34d399"
+            elif head_agrees:
+                consensus_badge = "Cephalic Validated"
+                consensus_color = "#38bdf8"
+            elif caudal_agrees:
+                consensus_badge = "Caudal Validated"
+                consensus_color = "#38bdf8"
+            else:
+                consensus_badge = "Macro-Anchored"
+                consensus_color = "#94a3b8"
+
             roi_info = {
                 "head_thumb": to_base64_jpeg(head_bgr, quality=80, max_dim=120),
                 "caudal_thumb": to_base64_jpeg(caudal_bgr, quality=80, max_dim=120),
                 "cephalic_family": head_fam,
                 "caudal_family": caudal_fam,
-                "anatomical_match": bool(head_fam == predicted_family or caudal_fam == predicted_family),
+                "consensus_badge": consensus_badge,
+                "consensus_color": consensus_color,
+                "anatomical_match": bool(head_agrees or caudal_agrees),
                 "has_dual_crop": True
             }
 

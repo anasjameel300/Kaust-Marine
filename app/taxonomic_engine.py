@@ -21,15 +21,18 @@ import torch
 import torch.nn.functional as F
 import numpy as np
 from pathlib import Path
-from typing import Dict, Any, List, Tuple
+from typing import Dict, Any, List, Tuple, Optional
 import timm
 from torchvision import transforms
 from ultralytics import YOLO
+from app.dual_crop_engine import dual_crop_extractor, to_base64_jpeg
 
 # Paths
 BASE_DIR = Path(__file__).resolve().parent
 PROJECT_ROOT = BASE_DIR.parent
-RUNS_DIR = PROJECT_ROOT / "runs" / "classify"
+RUNS_DIR = PROJECT_ROOT / "runs" / "classify_fish_vista"
+if not RUNS_DIR.exists():
+    RUNS_DIR = PROJECT_ROOT / "runs" / "classify"
 METADATA_PATH = PROJECT_ROOT / "datasets" / "taxonomic_cls" / "taxonomy_metadata.json"
 
 # Device selection
@@ -165,11 +168,18 @@ def letterbox_pad(img_bgr: np.ndarray, target_size: int = 224, pad_color: Tuple[
     )
     return padded
 
-# Image transforms for PyTorch models (input is already 224x224 letterboxed)
+# Image transforms for PyTorch models (ImageNet normalization)
 transform_pipeline = transforms.Compose([
     transforms.ToPILImage(),
     transforms.ToTensor(),
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
+])
+
+# Transforms for CLIP / BioCLIP
+transform_clip = transforms.Compose([
+    transforms.ToPILImage(),
+    transforms.ToTensor(),
+    transforms.Normalize(mean=[0.48145466, 0.4578275, 0.40821073], std=[0.26862954, 0.26130258, 0.27577711])
 ])
 
 class MultiModelTaxonomicEngine:
@@ -178,83 +188,272 @@ class MultiModelTaxonomicEngine:
         self.load_models()
 
     def load_models(self):
-        # 1. YOLO11s-cls
-        yolo_path = RUNS_DIR / "kaust_taxonomic_cls_v1" / "weights" / "best.pt"
+        # 1. BioCLIP + LoRA (In-Situ Wild Champion)
+        bioclip_path = RUNS_DIR / "bioclip_lora" / "best.pth"
+        if bioclip_path.exists():
+            try:
+                import sys
+                if str(PROJECT_ROOT) not in sys.path:
+                    sys.path.insert(0, str(PROJECT_ROOT))
+                import open_clip
+                from scripts.train_bioclip_lora import BioCLIPWithLoRA
+                print(f"[Taxonomic Engine] Loading BioCLIP + LoRA ({bioclip_path.name})...")
+                ck = torch.load(str(bioclip_path), map_location=device, weights_only=False)
+                clip_base, _, _ = open_clip.create_model_and_transforms("hf-hub:imageomics/bioclip")
+                m = BioCLIPWithLoRA(clip_base, num_classes=len(CLASS_NAMES), rank=ck.get("rank", 8), alpha=ck.get("alpha", 16.0))
+                m.load_state_dict(ck["state_dict"])
+                m.to(device).eval()
+                self.models["bioclip"] = m
+            except Exception as e:
+                print(f"[Taxonomic Engine] Warning: Failed to load BioCLIP LoRA: {e}")
+
+        # 2. ResNet50d (Landed Catch Champion)
+        resnet_path = RUNS_DIR / "resnet50d" / "best.pth"
+        if resnet_path.exists():
+            try:
+                print(f"[Taxonomic Engine] Loading ResNet50d ({resnet_path.name})...")
+                ck = torch.load(str(resnet_path), map_location=device, weights_only=False)
+                m = timm.create_model("resnet50d", pretrained=False, num_classes=len(CLASS_NAMES))
+                m.load_state_dict(ck["state_dict"])
+                m.to(device).eval()
+                self.models["resnet50"] = m
+            except Exception as e:
+                print(f"[Taxonomic Engine] Warning: Failed to load ResNet50: {e}")
+
+        # 3. DINOv2-Small + LoRA (VFM Champion)
+        dino_path = RUNS_DIR / "dinov2_lora" / "best.pth"
+        if dino_path.exists():
+            try:
+                import sys
+                if str(PROJECT_ROOT) not in sys.path:
+                    sys.path.insert(0, str(PROJECT_ROOT))
+                from scripts.train_dinov2_lora import DINOv2WithLoRAClassifier
+                print(f"[Taxonomic Engine] Loading DINOv2-Small + LoRA ({dino_path.name})...")
+                ck = torch.load(str(dino_path), map_location=device, weights_only=False)
+                m = DINOv2WithLoRAClassifier(num_classes=len(CLASS_NAMES), rank=ck.get("rank", 8), alpha=ck.get("alpha", 16.0))
+                m.load_state_dict(ck["state_dict"])
+                m.to(device).eval()
+                self.models["dinov2"] = m
+            except Exception as e:
+                print(f"[Taxonomic Engine] Warning: Failed to load DINOv2 LoRA: {e}")
+
+        # 4. YOLO11s-cls
+        yolo_path = RUNS_DIR / "yolo11s_cls" / "weights" / "best.pt"
+        if not yolo_path.exists():
+            yolo_path = PROJECT_ROOT / "runs" / "classify" / "kaust_taxonomic_cls_v1" / "weights" / "best.pt"
         if yolo_path.exists():
             print(f"[Taxonomic Engine] Loading YOLO11s-cls ({yolo_path.name})...")
             self.models["yolo"] = YOLO(str(yolo_path))
-        else:
-            print("[Taxonomic Engine] Warning: YOLO11s-cls weights not found.")
 
-        # 2. ConvNeXt-Tiny
-        conv_path = RUNS_DIR / "convnext_tiny" / "best.pth"
-        if conv_path.exists():
-            print(f"[Taxonomic Engine] Loading ConvNeXt-Tiny ({conv_path.name})...")
-            ck = torch.load(str(conv_path), map_location=device)
-            m = timm.create_model("convnext_tiny", pretrained=False, num_classes=len(CLASS_NAMES))
-            m.load_state_dict(ck["state_dict"])
-            m.to(device).eval()
-            self.models["convnext"] = m
-        else:
-            print("[Taxonomic Engine] Warning: ConvNeXt weights not found.")
-
-        # 3. MobileNetV4-Small
-        mob_path = RUNS_DIR / "mobilenetv4_small" / "best.pth"
-        if mob_path.exists():
-            print(f"[Taxonomic Engine] Loading MobileNetV4-Small ({mob_path.name})...")
-            ck = torch.load(str(mob_path), map_location=device)
-            m = timm.create_model("mobilenetv4_conv_small", pretrained=False, num_classes=len(CLASS_NAMES))
-            m.load_state_dict(ck["state_dict"])
-            m.to(device).eval()
-            self.models["mobilenetv4"] = m
-        else:
-            print("[Taxonomic Engine] Warning: MobileNetV4 weights not found.")
-
-        # 4. Swin-Tiny Transformer
+        # 5. Swin-Tiny Transformer
         swin_path = RUNS_DIR / "swin_tiny" / "best.pth"
         if swin_path.exists():
-            print(f"[Taxonomic Engine] Loading Swin-Tiny Transformer ({swin_path.name})...")
-            ck = torch.load(str(swin_path), map_location=device)
-            m = timm.create_model("swin_tiny_patch4_window7_224", pretrained=False, num_classes=len(CLASS_NAMES))
-            m.load_state_dict(ck["state_dict"])
-            m.to(device).eval()
-            self.models["swin"] = m
-        else:
-            print("[Taxonomic Engine] Warning: Swin Transformer weights not found.")
+            try:
+                print(f"[Taxonomic Engine] Loading Swin-Tiny Transformer ({swin_path.name})...")
+                ck = torch.load(str(swin_path), map_location=device, weights_only=False)
+                m = timm.create_model("swin_tiny_patch4_window7_224", pretrained=False, num_classes=len(CLASS_NAMES))
+                m.load_state_dict(ck["state_dict"])
+                m.to(device).eval()
+                self.models["swin"] = m
+            except Exception as e:
+                print(f"[Taxonomic Engine] Warning: Failed to load Swin: {e}")
+
+        # 6. MobileNetV4-Small
+        mob_path = RUNS_DIR / "mobilenetv4_small" / "best.pth"
+        if mob_path.exists():
+            try:
+                ck = torch.load(str(mob_path), map_location=device, weights_only=False)
+                m = timm.create_model("mobilenetv4_conv_small", pretrained=False, num_classes=len(CLASS_NAMES))
+                m.load_state_dict(ck["state_dict"])
+                m.to(device).eval()
+                self.models["mobilenetv4"] = m
+            except Exception:
+                pass
+
+        # 7. ConvNeXt-Tiny
+        conv_path = RUNS_DIR / "convnext_tiny" / "best.pth"
+        if conv_path.exists():
+            try:
+                ck = torch.load(str(conv_path), map_location=device, weights_only=False)
+                m = timm.create_model("convnext_tiny", pretrained=False, num_classes=len(CLASS_NAMES))
+                m.load_state_dict(ck["state_dict"])
+                m.to(device).eval()
+                self.models["convnext"] = m
+            except Exception:
+                pass
 
         print(f"[Taxonomic Engine] Active Classifier Backbones: {list(self.models.keys())}")
 
-    def classify_crop(self, crop_bgr: np.ndarray, mode: str = "ensemble") -> Dict[str, Any]:
+    def classify_crop(self, crop_bgr: np.ndarray, mode: str = "bioclip",
+                      full_img_bgr: Optional[np.ndarray] = None, box: Optional[list] = None,
+                      enable_dual_crop: bool = True) -> Dict[str, Any]:
         """
         Classifies a single cropped fish instance using the chosen mode:
-        mode in ['ensemble', 'swin', 'convnext', 'mobilenetv4', 'yolo']
+        mode in ['bioclip', 'resnet50', 'dinov2', 'ensemble', 'swin', 'yolo', 'mobilenetv4', 'convnext']
+        Supports Dual-Crop Multi-Region Feature Extraction (Fish-Vista CVPR 2025):
+        Global letterbox (55%) + Cephalic ROI (25%) + Caudal Peduncle ROI (20%).
         """
         if crop_bgr is None or crop_bgr.size == 0 or crop_bgr.shape[0] < 5 or crop_bgr.shape[1] < 5:
-            # Fallback for degenerate crop
             return self._format_result("Pomacentridae", 0.50, {}, "Fallback")
 
-        # Letterbox pad the crop to 224x224 to preserve authentic biological aspect ratio
-        crop_padded_bgr = letterbox_pad(crop_bgr, target_size=224)
-        crop_rgb = cv2.cvtColor(crop_padded_bgr, cv2.COLOR_BGR2RGB)
-        tensor_img = transform_pipeline(crop_rgb).unsqueeze(0).to(device)
+        # 1. Multi-Region Anatomical Crop Extraction
+        if full_img_bgr is not None and box is not None:
+            regions = dual_crop_extractor.extract_regions(full_img_bgr, box)
+        else:
+            regions = dual_crop_extractor.extract_from_crop(crop_bgr)
+
+        global_bgr = regions["global"]
+        head_bgr = regions["head"]
+        caudal_bgr = regions["caudal"]
+
+        global_rgb = cv2.cvtColor(global_bgr, cv2.COLOR_BGR2RGB)
+        tensor_img = transform_pipeline(global_rgb).unsqueeze(0).to(device)
+        tensor_clip = transform_clip(global_rgb).unsqueeze(0).to(device)
+
+        if enable_dual_crop:
+            head_rgb = cv2.cvtColor(head_bgr, cv2.COLOR_BGR2RGB)
+            caudal_rgb = cv2.cvtColor(caudal_bgr, cv2.COLOR_BGR2RGB)
+            tensor_head_img = transform_pipeline(head_rgb).unsqueeze(0).to(device)
+            tensor_head_clip = transform_clip(head_rgb).unsqueeze(0).to(device)
+            tensor_caudal_img = transform_pipeline(caudal_rgb).unsqueeze(0).to(device)
+            tensor_caudal_clip = transform_clip(caudal_rgb).unsqueeze(0).to(device)
 
         model_probs: Dict[str, np.ndarray] = {}
         model_predictions: Dict[str, str] = {}
         model_confidences: Dict[str, float] = {}
+        head_trait_preds: Dict[str, str] = {}
+        caudal_trait_preds: Dict[str, str] = {}
 
-        # 1. ConvNeXt
-        if "convnext" in self.models and (mode in ["ensemble", "convnext"]):
+        # 1. BioCLIP + LoRA (In-Situ Wild Champion)
+        if "bioclip" in self.models and (mode in ["ensemble", "bioclip"]):
             with torch.no_grad():
                 with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
-                    logits = self.models["convnext"](tensor_img)
-                    probs = F.softmax(logits, dim=1).cpu().numpy()[0]
-                    model_probs["ConvNeXt-Tiny"] = probs
-                    top_idx = int(np.argmax(probs))
-                    model_predictions["ConvNeXt-Tiny"] = CLASS_NAMES[top_idx]
-                    model_confidences["ConvNeXt-Tiny"] = round(float(probs[top_idx]), 3)
+                    if enable_dual_crop:
+                        batch_clip = torch.cat([tensor_clip, tensor_head_clip, tensor_caudal_clip], dim=0)
+                        logits = self.models["bioclip"](batch_clip)
+                        probs = F.softmax(logits, dim=1).cpu().numpy()
+                        p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
+                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        head_trait_preds["BioCLIP"] = CLASS_NAMES[int(np.argmax(p_head))]
+                        caudal_trait_preds["BioCLIP"] = CLASS_NAMES[int(np.argmax(p_caudal))]
+                    else:
+                        logits = self.models["bioclip"](tensor_clip)
+                        p_fused = F.softmax(logits, dim=1).cpu().numpy()[0]
 
-        # 2. MobileNetV4
-        if "mobilenetv4" in self.models and (mode in ["ensemble", "mobilenetv4"]):
+                    model_probs["BioCLIP-LoRA"] = p_fused
+                    top_idx = int(np.argmax(p_fused))
+                    model_predictions["BioCLIP-LoRA"] = CLASS_NAMES[top_idx]
+                    model_confidences["BioCLIP-LoRA"] = round(float(p_fused[top_idx]), 3)
+
+        # 2. ResNet50d (Landed Catch Champion)
+        if "resnet50" in self.models and (mode in ["ensemble", "resnet50"]):
+            with torch.no_grad():
+                with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
+                    if enable_dual_crop:
+                        batch_img = torch.cat([tensor_img, tensor_head_img, tensor_caudal_img], dim=0)
+                        logits = self.models["resnet50"](batch_img)
+                        probs = F.softmax(logits, dim=1).cpu().numpy()
+                        p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
+                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        head_trait_preds["ResNet50d"] = CLASS_NAMES[int(np.argmax(p_head))]
+                        caudal_trait_preds["ResNet50d"] = CLASS_NAMES[int(np.argmax(p_caudal))]
+                    else:
+                        logits = self.models["resnet50"](tensor_img)
+                        p_fused = F.softmax(logits, dim=1).cpu().numpy()[0]
+
+                    model_probs["ResNet50d"] = p_fused
+                    top_idx = int(np.argmax(p_fused))
+                    model_predictions["ResNet50d"] = CLASS_NAMES[top_idx]
+                    model_confidences["ResNet50d"] = round(float(p_fused[top_idx]), 3)
+
+        # 3. DINOv2-Small + LoRA
+        if "dinov2" in self.models and (mode in ["ensemble", "dinov2"]):
+            with torch.no_grad():
+                with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
+                    if enable_dual_crop:
+                        batch_img = torch.cat([tensor_img, tensor_head_img, tensor_caudal_img], dim=0)
+                        logits = self.models["dinov2"](batch_img)
+                        probs = F.softmax(logits, dim=1).cpu().numpy()
+                        p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
+                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                        head_trait_preds["DINOv2"] = CLASS_NAMES[int(np.argmax(p_head))]
+                        caudal_trait_preds["DINOv2"] = CLASS_NAMES[int(np.argmax(p_caudal))]
+                    else:
+                        logits = self.models["dinov2"](tensor_img)
+                        p_fused = F.softmax(logits, dim=1).cpu().numpy()[0]
+
+                    model_probs["DINOv2-LoRA"] = p_fused
+                    top_idx = int(np.argmax(p_fused))
+                    model_predictions["DINOv2-LoRA"] = CLASS_NAMES[top_idx]
+                    model_confidences["DINOv2-LoRA"] = round(float(p_fused[top_idx]), 3)
+
+        # 4. Swin Transformer
+        if "swin" in self.models and (mode in ["ensemble", "swin"]):
+            with torch.no_grad():
+                with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
+                    if enable_dual_crop:
+                        batch_img = torch.cat([tensor_img, tensor_head_img, tensor_caudal_img], dim=0)
+                        logits = self.models["swin"](batch_img)
+                        probs = F.softmax(logits, dim=1).cpu().numpy()
+                        p_glob, p_head, p_caudal = probs[0], probs[1], probs[2]
+                        p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+                    else:
+                        logits = self.models["swin"](tensor_img)
+                        p_fused = F.softmax(logits, dim=1).cpu().numpy()[0]
+
+                    model_probs["Swin-Tiny"] = p_fused
+                    top_idx = int(np.argmax(p_fused))
+                    model_predictions["Swin-Tiny"] = CLASS_NAMES[top_idx]
+                    model_confidences["Swin-Tiny"] = round(float(p_fused[top_idx]), 3)
+
+        # 5. YOLO11s-cls
+        if "yolo" in self.models and (mode in ["ensemble", "yolo"]):
+            if enable_dual_crop:
+                res_glob = self.models["yolo"].predict(global_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
+                p_glob = np.zeros(len(CLASS_NAMES))
+                if res_glob.probs is not None:
+                    pd = res_glob.probs.data.cpu().numpy()
+                    yn = res_glob.names
+                    yd = {yn[i]: float(pd[i]) for i in range(len(pd))}
+                    p_glob = np.array([yd.get(c, 0.0) for c in CLASS_NAMES])
+                    if p_glob.sum() > 0: p_glob = p_glob / p_glob.sum()
+
+                res_head = self.models["yolo"].predict(head_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
+                p_head = np.zeros(len(CLASS_NAMES))
+                if res_head.probs is not None:
+                    pd = res_head.probs.data.cpu().numpy()
+                    yn = res_head.names
+                    yd = {yn[i]: float(pd[i]) for i in range(len(pd))}
+                    p_head = np.array([yd.get(c, 0.0) for c in CLASS_NAMES])
+                    if p_head.sum() > 0: p_head = p_head / p_head.sum()
+
+                res_caudal = self.models["yolo"].predict(caudal_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
+                p_caudal = np.zeros(len(CLASS_NAMES))
+                if res_caudal.probs is not None:
+                    pd = res_caudal.probs.data.cpu().numpy()
+                    yn = res_caudal.names
+                    yd = {yn[i]: float(pd[i]) for i in range(len(pd))}
+                    p_caudal = np.array([yd.get(c, 0.0) for c in CLASS_NAMES])
+                    if p_caudal.sum() > 0: p_caudal = p_caudal / p_caudal.sum()
+
+                p_fused = 0.55 * p_glob + 0.25 * p_head + 0.20 * p_caudal
+            else:
+                res_glob = self.models["yolo"].predict(global_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
+                p_fused = np.zeros(len(CLASS_NAMES))
+                if res_glob.probs is not None:
+                    pd = res_glob.probs.data.cpu().numpy()
+                    yn = res_glob.names
+                    yd = {yn[i]: float(pd[i]) for i in range(len(pd))}
+                    p_fused = np.array([yd.get(c, 0.0) for c in CLASS_NAMES])
+                    if p_fused.sum() > 0: p_fused = p_fused / p_fused.sum()
+
+            model_probs["YOLO11s-cls"] = p_fused
+            top_idx = int(np.argmax(p_fused))
+            model_predictions["YOLO11s-cls"] = CLASS_NAMES[top_idx]
+            model_confidences["YOLO11s-cls"] = round(float(p_fused[top_idx]), 3)
+
+        # 6. MobileNetV4
+        if "mobilenetv4" in self.models and (mode == "mobilenetv4"):
             with torch.no_grad():
                 with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
                     logits = self.models["mobilenetv4"](tensor_img)
@@ -264,43 +463,23 @@ class MultiModelTaxonomicEngine:
                     model_predictions["MobileNetV4"] = CLASS_NAMES[top_idx]
                     model_confidences["MobileNetV4"] = round(float(probs[top_idx]), 3)
 
-        # 3. Swin Transformer
-        if "swin" in self.models and (mode in ["ensemble", "swin"]):
-            with torch.no_grad():
-                with torch.amp.autocast('cuda', enabled=torch.cuda.is_available()):
-                    logits = self.models["swin"](tensor_img)
-                    probs = F.softmax(logits, dim=1).cpu().numpy()[0]
-                    model_probs["Swin-Tiny"] = probs
-                    top_idx = int(np.argmax(probs))
-                    model_predictions["Swin-Tiny"] = CLASS_NAMES[top_idx]
-                    model_confidences["Swin-Tiny"] = round(float(probs[top_idx]), 3)
-
-        # 4. YOLO11s-cls
-        if "yolo" in self.models and (mode in ["ensemble", "yolo"]):
-            # Ultralytics accepts letterboxed RGB array directly
-            results = self.models["yolo"].predict(crop_rgb, verbose=False, device=0 if torch.cuda.is_available() else "cpu")[0]
-            if results.probs is not None:
-                probs_data = results.probs.data.cpu().numpy()
-                # Re-map according to model names
-                yolo_names = results.names
-                yolo_dict = {yolo_names[i]: float(probs_data[i]) for i in range(len(probs_data))}
-                probs = np.array([yolo_dict.get(c, 0.0) for c in CLASS_NAMES])
-                # Normalize sum
-                if probs.sum() > 0:
-                    probs = probs / probs.sum()
-                model_probs["YOLO11s-cls"] = probs
-                top_idx = int(np.argmax(probs))
-                model_predictions["YOLO11s-cls"] = CLASS_NAMES[top_idx]
-                model_confidences["YOLO11s-cls"] = round(float(probs[top_idx]), 3)
-
         if not model_probs:
             return self._format_result("Pomacentridae", 0.50, {}, "Fallback")
 
-        # Decision Strategy: Ensemble Soft-Voting or Single Model
+        # Decision Strategy: Scientific Ensemble Soft-Voting or Single Model
         if mode == "ensemble":
-            # Average probability distributions
-            prob_matrix = np.array(list(model_probs.values()))
-            mean_probs = np.mean(prob_matrix, axis=0)
+            MODEL_WEIGHTS = {
+                "BioCLIP-LoRA": 2.5,
+                "DINOv2-LoRA": 1.5,
+                "ResNet50d": 1.0,
+                "Swin-Tiny": 1.0,
+                "YOLO11s-cls": 1.0,
+                "MobileNetV4": 0.5,
+                "ConvNeXt": 0.5
+            }
+            total_weight = sum(MODEL_WEIGHTS.get(k, 1.0) for k in model_probs.keys())
+            weighted_sum = sum(model_probs[k] * MODEL_WEIGHTS.get(k, 1.0) for k in model_probs.keys())
+            mean_probs = weighted_sum / max(1e-5, total_weight)
             final_idx = int(np.argmax(mean_probs))
             predicted_family = CLASS_NAMES[final_idx]
             final_conf = round(float(mean_probs[final_idx]), 3)
@@ -319,9 +498,7 @@ class MultiModelTaxonomicEngine:
             else:
                 agreement_status = f"Uncertain / Split Vote ({vote_count}/{total_voters})"
                 consensus_level = "low"
-
         else:
-            # Single model output
             model_key_name = list(model_probs.keys())[0]
             probs = model_probs[model_key_name]
             final_idx = int(np.argmax(probs))
@@ -330,17 +507,33 @@ class MultiModelTaxonomicEngine:
             agreement_status = f"Single Model ({model_key_name})"
             consensus_level = "high"
 
+        # Multi-Region ROI payload
+        roi_info = None
+        if enable_dual_crop:
+            head_fam = list(head_trait_preds.values())[0] if head_trait_preds else predicted_family
+            caudal_fam = list(caudal_trait_preds.values())[0] if caudal_trait_preds else predicted_family
+            roi_info = {
+                "head_thumb": to_base64_jpeg(head_bgr, quality=80, max_dim=120),
+                "caudal_thumb": to_base64_jpeg(caudal_bgr, quality=80, max_dim=120),
+                "cephalic_family": head_fam,
+                "caudal_family": caudal_fam,
+                "anatomical_match": bool(head_fam == predicted_family or caudal_fam == predicted_family),
+                "has_dual_crop": True
+            }
+
         return self._format_result(
             predicted_family=predicted_family,
             confidence=final_conf,
             model_votes=model_predictions,
             agreement_status=agreement_status,
             consensus_level=consensus_level,
-            individual_confs=model_confidences
+            individual_confs=model_confidences,
+            rois=roi_info
         )
 
     def _format_result(self, predicted_family: str, confidence: float, model_votes: Dict[str, str],
-                       agreement_status: str, consensus_level: str = "high", individual_confs: Dict[str, float] = None) -> Dict[str, Any]:
+                       agreement_status: str, consensus_level: str = "high", individual_confs: Dict[str, float] = None,
+                       rois: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
         profile = FAMILY_PROFILES.get(predicted_family, {
             "common_name": "Reef Fish",
             "scientific_representative": "Teleostei",
@@ -367,7 +560,8 @@ class MultiModelTaxonomicEngine:
             "model_votes": model_votes,
             "individual_confidences": individual_confs or {},
             "fb_a": profile["fb_a"],
-            "fb_b": profile["fb_b"]
+            "fb_b": profile["fb_b"],
+            "rois": rois
         }
 
 # Global singleton engine

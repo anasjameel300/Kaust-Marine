@@ -71,6 +71,7 @@ const toggleOutlines = document.getElementById('toggleOutlines');
 const toggleMasks = document.getElementById('toggleMasks');
 const toggleBadges = document.getElementById('toggleBadges');
 const toggleTiling = document.getElementById('toggleTiling');
+const toggleDualCrop = document.getElementById('toggleDualCrop');
 
 const runBtn = document.getElementById('runBtn');
 const btnSpinner = document.getElementById('btnSpinner');
@@ -124,6 +125,12 @@ function setupEventListeners() {
 
   if (classifierSelect) {
     classifierSelect.addEventListener('change', () => {
+      if (state.isClassified) runSegmentation(true);
+    });
+  }
+
+  if (toggleDualCrop) {
+    toggleDualCrop.addEventListener('change', () => {
       if (state.isClassified) runSegmentation(true);
     });
   }
@@ -322,6 +329,9 @@ async function runSegmentation(runClassify = false) {
     formData.append('run_classification', runClassify ? 'true' : 'false');
     if (classifierSelect) {
       formData.append('classifier_mode', classifierSelect.value);
+    }
+    if (toggleDualCrop) {
+      formData.append('enable_dual_crop', toggleDualCrop.checked);
     }
     if (presetSelect) {
       formData.append('calibration_preset', presetSelect.value);
@@ -549,6 +559,31 @@ function updateSidebar() {
       `;
     }
 
+    let roiHtml = '';
+    if (det.taxonomy && det.taxonomy.rois && det.taxonomy.rois.head_thumb) {
+      const rois = det.taxonomy.rois;
+      roiHtml = `
+        <div style="margin-top: 6px; padding: 6px 8px; background: rgba(15, 23, 42, 0.7); border-radius: 4px; border: 1px dashed rgba(56, 189, 248, 0.25);">
+          <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 5px;">
+            <span style="font-size: 0.62rem; color: #38bdf8; font-weight: 600; text-transform: uppercase; letter-spacing: 0.5px;">Dual-Crop ROIs (Fish-Vista)</span>
+            <span style="font-size: 0.58rem; color: ${rois.anatomical_match ? '#34d399' : '#fbbf24'};">${rois.anatomical_match ? '✓ Anatomical Consensus' : 'Split Morphology'}</span>
+          </div>
+          <div style="display: flex; gap: 8px;">
+            <div style="flex: 1; text-align: center; background: rgba(0,0,0,0.35); border-radius: 4px; padding: 4px;">
+              <img src="${rois.head_thumb}" alt="Cephalic ROI" style="width: 100%; height: 44px; object-fit: cover; border-radius: 3px; border: 1px solid rgba(56, 189, 248, 0.35);">
+              <span style="display: block; font-size: 0.58rem; color: #94a3b8; margin-top: 3px;">Cephalic (35%)</span>
+              <span style="display: block; font-size: 0.60rem; color: #e2e8f0; font-weight: 500;">${rois.cephalic_family || 'Snout'}</span>
+            </div>
+            <div style="flex: 1; text-align: center; background: rgba(0,0,0,0.35); border-radius: 4px; padding: 4px;">
+              <img src="${rois.caudal_thumb}" alt="Caudal ROI" style="width: 100%; height: 44px; object-fit: cover; border-radius: 3px; border: 1px solid rgba(56, 189, 248, 0.35);">
+              <span style="display: block; font-size: 0.58rem; color: #94a3b8; margin-top: 3px;">Caudal (25%)</span>
+              <span style="display: block; font-size: 0.60rem; color: #e2e8f0; font-weight: 500;">${rois.caudal_family || 'Spine'}</span>
+            </div>
+          </div>
+        </div>
+      `;
+    }
+
     const bioHtml = det.biomass ? `
       <div class="instance-grid">
         <span>Length<strong>${det.biomass.fork_length_cm} cm</strong></span>
@@ -575,6 +610,7 @@ function updateSidebar() {
         <span class="pill-badge pill-green">${Math.round(det.confidence * 100)}%</span>
       </div>
       ${taxHtml}
+      ${roiHtml}
       ${bioHtml}
     `;
 

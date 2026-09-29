@@ -233,8 +233,12 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
   - Downloaded 250 verified wild in-situ Red Sea photos (`datasets/evaluation_ood_redsea`) across 10 families.
   - Executed automated evaluation across all 7 models ([reports/dual_benchmark_leaderboard.md](file:///c:/Users/anasjameel/Desktop/Kaust%20Marine/reports/dual_benchmark_leaderboard.md)).
   - Proved the "Underwater Illusion": CNNs suffer an ~80% collapse in the wild (14-17%), while BioCLIP + LoRA dominates at **51.20% Top-1 and 89.60% Top-5**.
-- [ ] **Step 3 (Upcoming Next):** Dual-Crop Multi-Region Feature Extraction (Stream A: Global letterbox + Stream B: Cephalic & Caudal peduncle ROIs with cross-attention fusion).
-- [ ] **Step 4 (Upcoming Next):** Full-Stack Dashboard Dual-Engine Integration (`taxonomic_engine.py` toggle between Fast Edge Mode and In-Situ BioCLIP Mode).
+- [x] **Step 3 (Completed):** Dual-Crop Multi-Region Feature Extraction (Fish-Vista CVPR 2025):
+  - Created `app/dual_crop_engine.py` isolating Stream A (Global letterbox) + Stream B1 (Cephalic anterior 35% ROI) + Stream B2 (Caudal posterior 25% ROI).
+  - Wired into `app/taxonomic_engine.py` with multi-region trait fusion ($0.55 \cdot P_{\text{global}} + 0.25 \cdot P_{\text{head}} + 0.20 \cdot P_{\text{caudal}}$) to resolve camouflage and lighting ambiguities.
+- [x] **Step 4 (Completed):** Full-Stack Dashboard Integration & Model Suite:
+  - Integrated all 7 models into `app/taxonomic_engine.py`, `app/server.py`, and `app/static/`: BioCLIP + LoRA (In-Situ Wild Champion), ResNet50d (Landed Catch Champion), DINOv2-LoRA, YOLO11s-cls, Swin-Tiny, and Scientific Ensemble.
+  - Added interactive Dual-Crop ROI visualizer in the specimen cards displaying high-res base64 Cephalic & Caudal thumbnails with anatomical consensus badges.
 
 ### Phase 6: Documentation & PI Application Dossier (ACTIVE NEXT STEP)
 - [ ] Prepare tailored research dossier and publication manuscript highlighting:

@@ -227,6 +227,23 @@ We assembled a dedicated Out-of-Distribution (OOD) test benchmark of **250 resea
    - **Dr. Jessica Zamborain-Mason (Landed Catch):** ResNet50d (97.8%) and YOLO11s (95.3%) remain the champion edge architectures for flat measuring boards and market stalls.
    - **Dr. Renato Morais (In-Situ BRUVs & Reef Video):** BioCLIP + LoRA (89.6% Top-5) is the only viable candidate architecture for wild underwater video deployments.
 
-**Planned Next Steps (Roadmap):**
-- **Dual-Crop Multi-Region Feature Extraction:** Integrating cephalic and caudal peduncle crops to resolve remaining subtle confusions in wild imagery (coming soon).
-- **Dashboard Dual-Engine Integration:** Updating `taxonomic_engine.py` to allow live toggling between Fast Edge Mode (ResNet/YOLO) and In-Situ Ecological Mode (BioCLIP LoRA) (coming soon).
+**Completed Next Steps (Section 8.7):**
+
+### 8.7 Site Integration & Dual-Crop Multi-Region Feature Extraction Operational
+1. **Live Portal Classifier Suite:**
+   - Integrated all 7 trained models into `app/taxonomic_engine.py` and the frontend UI (`app/static/index.html`):
+     - **BioCLIP + LoRA (In-Situ Wild Champion — 89.6% T5 / 51.2% T1)** [Default]
+     - **ResNet50d (Landed Catch Champion — 97.8% Top-1)**
+     - **DINOv2-Small + LoRA (Foundation Model — 98.1% Top-1)**
+     - **Scientific Ensemble (Weighted VFM + CNN Consensus)**
+     - **Swin-Tiny Transformer (Window Attention — 97.5%)**
+     - **YOLO11s-cls (Fast Edge Inference — 95.3%)**
+     - **MobileNetV4-Small & ConvNeXt-Tiny (Edge Baselines)**
+2. **Dual-Crop Multi-Region Trait Extraction (Fish-Vista CVPR 2025):**
+   - Implemented `app/dual_crop_engine.py` and integrated it directly into `/api/segment`:
+     - **Stream A (Global Letterbox):** Aspect-ratio preserved whole-organism view capturing length-to-depth ratio and overall counter-shading.
+     - **Stream B1 (Cephalic ROI - Anterior 35%):** Diagnostic snout angle, eye diameter ratio, and mouth orientation.
+     - **Stream B2 (Caudal Peduncle ROI - Posterior 25%):** Diagnostic caudal spine (scalpel marker), peduncle depth, and fin fork geometry.
+     - **Multi-Region Anatomical Fusion:** Fuses regional logits ($0.55 \cdot P_{\text{global}} + 0.25 \cdot P_{\text{head}} + 0.20 \cdot P_{\text{caudal}}$) to resolve camouflage ambiguities.
+3. **Interactive Visual Dashboard:**
+   - Each segmented fish card in the UI displays real-time high-resolution base64 thumbnails of both the Cephalic (Anterior) and Caudal (Posterior) crops alongside regional family predictions and an anatomical consensus verification badge.

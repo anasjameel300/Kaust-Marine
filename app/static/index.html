@@ -94,12 +94,22 @@
             <span id="classifyBadge" class="mono-badge" style="font-size: 0.62rem; color: var(--accent-cyan);">On-Demand</span>
           </div>
           <select id="classifierSelect" class="form-select" style="margin-bottom: 8px;">
-            <option value="ensemble" selected>Multi-Model Ensemble (Soft Voting)</option>
-            <option value="swin">Swin-Tiny Transformer (98.9%)</option>
-            <option value="mobilenetv4">MobileNetV4-Small (98.0%)</option>
-            <option value="convnext">ConvNeXt-Tiny (97.3%)</option>
-            <option value="yolo">YOLO11s-cls (99.8%)</option>
+            <option value="bioclip" selected>BioCLIP + LoRA (In-Situ Wild Champion — 89.6% T5)</option>
+            <option value="resnet50">ResNet50d (Landed Catch Champion — 97.8%)</option>
+            <option value="dinov2">DINOv2-Small + LoRA (VFM Benchmark — 98.1%)</option>
+            <option value="ensemble">Scientific Ensemble (VFM + CNN Consensus)</option>
+            <option value="swin">Swin-Tiny Transformer (Shifted Windows — 97.5%)</option>
+            <option value="yolo">YOLO11s-cls (Fast Edge Inference — 95.3%)</option>
+            <option value="mobilenetv4">MobileNetV4-Small (Universal Edge — 81.1%)</option>
+            <option value="convnext">ConvNeXt-Tiny (Modern Pure ConvNet — 80.3%)</option>
           </select>
+          <label class="toggle-item" style="margin-bottom: 8px; font-size: 0.72rem; padding: 4px 6px; background: rgba(56, 189, 248, 0.05); border: 1px solid rgba(56, 189, 248, 0.18); border-radius: 4px;">
+            <span>
+              <strong style="color: #38bdf8;">Dual-Crop Multi-Region</strong>
+              <small style="display: block; color: #94a3b8; font-size: 0.62rem;">Cephalic (35%) &amp; Caudal (25%) ROIs (Fish-Vista CVPR)</small>
+            </span>
+            <input type="checkbox" id="toggleDualCrop" checked>
+          </label>
           <button type="button" class="btn btn-secondary" id="classifyBtn">
             <span id="classifySpinner" class="btn-spinner" style="display: none;"></span>
             <span id="classifyBtnText">Run Identification (Species ID)</span>

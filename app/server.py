@@ -334,7 +334,8 @@ async def run_segmentation(
     model_version: str = Form("v2"),
     enable_tiling: bool = Form(False),
     run_classification: bool = Form(False),
-    classifier_mode: str = Form("ensemble"),
+    classifier_mode: str = Form("bioclip"),
+    enable_dual_crop: bool = Form(True),
     calibration_preset: str = Form("custom"),
     pixels_per_cm: float = Form(25.0)
 ):
@@ -385,9 +386,15 @@ async def run_segmentation(
                     x2 = min(img_w, int(bx[2]))
                     y2 = min(img_h, int(bx[3]))
 
-                    # Crop fish organism for 4-model classification
+                    # Crop fish organism for classification with dual-crop multi-region extraction
                     crop = img[y1:y2, x1:x2]
-                    tax_res = taxonomic_engine.classify_crop(crop, mode=classifier_mode)
+                    tax_res = taxonomic_engine.classify_crop(
+                        crop_bgr=crop,
+                        mode=classifier_mode,
+                        full_img_bgr=img,
+                        box=bx,
+                        enable_dual_crop=enable_dual_crop
+                    )
                     d["taxonomy"] = tax_res
                     fb_a = tax_res["fb_a"]
                     fb_b = tax_res["fb_b"]
@@ -428,6 +435,7 @@ async def run_segmentation(
             "model_title": model_title,
             "run_classification": run_classification,
             "classifier_mode": classifier_mode,
+            "enable_dual_crop": enable_dual_crop,
             "calibration_preset": calibration_preset,
             "pixels_per_cm": pixels_per_cm,
             "enable_tiling": enable_tiling,

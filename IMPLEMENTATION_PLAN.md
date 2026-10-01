@@ -240,12 +240,21 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
   - Integrated all 7 models into `app/taxonomic_engine.py`, `app/server.py`, and `app/static/`: BioCLIP + LoRA (In-Situ Wild Champion), ResNet50d (Landed Catch Champion), DINOv2-LoRA, YOLO11s-cls, Swin-Tiny, and Scientific Ensemble.
   - Added interactive Dual-Crop ROI visualizer in the specimen cards displaying high-res base64 Cephalic & Caudal thumbnails with anatomical consensus badges.
 - [x] **Step 5 (Completed):** Adaptive Anchor-Preserving Gating & Scientific Transparency Modal (`👁`):
-  - Solved semantic OOD dilution via Option A adaptive gating: the global body remains the invariant anchor ($P_{\text{global}}$); agreeing sub-regions boost confidence while ambiguous isolated parts are safely filtered out.
-  - Integrated interactive research notes modal (`👁`) in both the sidebar control panel and specimen cards detailing the current status, biological motivation, and future multi-task training path.
+  - Solved semantic OOD dilution via Option A adaptive gating: the global body remains the invariant anchor; agreeing sub-regions boost confidence while ambiguous isolated parts are safely filtered out.
+  - Integrated interactive research notes modal (`👁`) in both the sidebar control panel and specimen cards.
+- [x] **Step 6 (Completed):** Scientific Calibration Confirmation Gate:
+  - Eliminated arbitrary pixel-to-metric assumptions on uncalibrated field photography.
+  - Implemented 3-tier calibration workflow: images load in uncalibrated state with locked metric sizes; user selects rig/measuring board and explicitly clicks "Confirm Calibration Scale".
+  - Distinguishes between heuristic unclassified weight and species-specific FishBase allometric biomass ($W = a \cdot L^b$).
+- [x] **Step 7 (Completed):** Automated BRUVs Video Tracking & MaxN Ecological Processing (Dr. Renato Morais):
+  - Created `app/video_engine.py` and `scripts/process_bruvs_video.py` combining YOLO11s-seg with ByteTrack multi-object tracking.
+  - Formulated the marine ecology MaxN standard (peak simultaneous individuals per frame) guaranteeing zero double-counting.
+  - Built full-stack Video Survey dashboard tab: video player, interactive temporal density sparkline, peak keyframe snapshot seek, and tracked fish registry.
+  - Ingested open-access sample Red Sea underwater video (`sample_redsea_sohal.mp4`) via `scripts/download_sample_video.py`.
 
 ### Phase 6: Documentation & PI Application Dossier (ACTIVE NEXT STEP)
 - [ ] Prepare tailored research dossier and publication manuscript highlighting:
-  - In-situ BRUVs biomass and diversity assessment for **Dr. Renato Morais** (*ROCKNHub*).
+  - In-situ BRUVs biomass, MaxN, and diversity assessment for **Dr. Renato Morais** (*ROCKNHub*).
   - Landed catch measuring board sizing and commercial yield tracking for **Dr. Jessica Zamborain-Mason** (*Integrated Reef Fisheries Lab*).
   - Scientific paper manuscript: *"Benchmarking Parameter-Efficient Vision Foundation Models versus Specialized Architectures for Fine-Grained Marine Fish Taxonomy and In-Situ Biomass Estimation"*.
 

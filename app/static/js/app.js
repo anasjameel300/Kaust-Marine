@@ -132,6 +132,7 @@ const classifyBadge = document.getElementById('classifyBadge');
 function initApp() {
   setupEventListeners();
   loadSampleThumbnails();
+  setupVideoModule();
 }
 
 if (document.readyState === 'loading') {
@@ -786,3 +787,579 @@ function downloadCanvasImage() {
   link.href = canvas.toDataURL('image/png');
   link.click();
 }
+
+// -------------------------------------------------------------
+// BRUVs Video & MaxN Processing Module (Dr. Renato Morais ROCKNHub)
+// -------------------------------------------------------------
+function setupVideoModule() {
+  const tabImageMode = document.getElementById('tabImageMode');
+  const tabVideoMode = document.getElementById('tabVideoMode');
+  const imageSidebarWrapper = document.getElementById('imageSidebarWrapper');
+  const videoSidebarWrapper = document.getElementById('videoSidebarWrapper');
+  const canvasWrapper = document.getElementById('canvasWrapper');
+  const videoWrapper = document.getElementById('videoWrapper');
+  const videoActivityBar = document.getElementById('videoActivityBar');
+  const fishList = document.getElementById('fishList');
+  const videoTracksList = document.getElementById('videoTracksList');
+  const detailsHeaderTitle = document.getElementById('detailsHeaderTitle');
+
+  const metricTitle1 = document.getElementById('metricTitle1');
+  const metricTitle2 = document.getElementById('metricTitle2');
+  const metricTitle3 = document.getElementById('metricTitle3');
+  const metricTitle4 = document.getElementById('metricTitle4');
+  const metricTitle5 = document.getElementById('metricTitle5');
+
+  const videoDropZone = document.getElementById('videoDropZone');
+  const videoFileInput = document.getElementById('videoFileInput');
+  const videoUploadTitle = document.getElementById('videoUploadTitle');
+  const videoUploadSubtitle = document.getElementById('videoUploadSubtitle');
+  const presetVideoSohal = document.getElementById('presetVideoSohal');
+
+  const videoSampleFps = document.getElementById('videoSampleFps');
+  const videoMaxDuration = document.getElementById('videoMaxDuration');
+  const videoClassifierSelect = document.getElementById('videoClassifierSelect');
+
+  const runVideoBtn = document.getElementById('runVideoBtn');
+  const videoBtnSpinner = document.getElementById('videoBtnSpinner');
+  const videoBtnText = document.getElementById('videoBtnText');
+  const videoLoader = document.getElementById('videoLoader');
+  const videoLoaderText = document.getElementById('videoLoaderText');
+
+  const bruvsVideoPlayer = document.getElementById('bruvsVideoPlayer');
+  const peakFrameThumbContainer = document.getElementById('peakFrameThumbContainer');
+  const peakFrameImg = document.getElementById('peakFrameImg');
+  const peakFramePlaceholder = document.getElementById('peakFramePlaceholder');
+  const peakTimestampBadge = document.getElementById('peakTimestampBadge');
+  const maxNCountBadge = document.getElementById('maxNCountBadge');
+  const timelineDurationText = document.getElementById('timelineDurationText');
+  const timelineCanvas = document.getElementById('timelineCanvas');
+
+  state.activeMode = 'image';
+  state.selectedVideoSample = 'sample_redsea_sohal.mp4';
+  state.uploadedVideoFile = null;
+  state.videoResults = null;
+
+  // 1. Mode Switching
+  function switchToImageMode() {
+    state.activeMode = 'image';
+    if (tabImageMode) {
+      tabImageMode.classList.add('active');
+      tabImageMode.style.background = '#1e293b';
+      tabImageMode.style.color = '#f8fafc';
+    }
+    if (tabVideoMode) {
+      tabVideoMode.classList.remove('active');
+      tabVideoMode.style.background = 'transparent';
+      tabVideoMode.style.color = '#94a3b8';
+    }
+
+    if (imageSidebarWrapper) imageSidebarWrapper.style.display = 'block';
+    if (videoSidebarWrapper) videoSidebarWrapper.style.display = 'none';
+    if (canvasWrapper) canvasWrapper.style.display = 'flex';
+    if (videoWrapper) videoWrapper.style.display = 'none';
+    if (videoActivityBar) videoActivityBar.style.display = 'none';
+    if (fishList) fishList.style.display = 'flex';
+    if (videoTracksList) videoTracksList.style.display = 'none';
+    if (videoLoader) videoLoader.style.display = 'none';
+
+    if (detailsHeaderTitle) detailsHeaderTitle.textContent = 'Detected Instances';
+    if (metricTitle1) metricTitle1.textContent = 'Fish Count';
+    if (metricTitle2) metricTitle2.textContent = 'Total Biomass (W)';
+    if (metricTitle3) metricTitle3.textContent = 'Commercial Catch';
+    if (metricTitle4) metricTitle4.textContent = 'Diversity Index (H\')';
+    if (metricTitle5) metricTitle5.textContent = 'Latency';
+
+    if (totalBadge) totalBadge.textContent = state.detections.length;
+    render();
+  }
+
+  function switchToVideoMode() {
+    state.activeMode = 'video';
+    if (tabVideoMode) {
+      tabVideoMode.classList.add('active');
+      tabVideoMode.style.background = '#1e293b';
+      tabVideoMode.style.color = '#f8fafc';
+    }
+    if (tabImageMode) {
+      tabImageMode.classList.remove('active');
+      tabImageMode.style.background = 'transparent';
+      tabImageMode.style.color = '#94a3b8';
+    }
+
+    if (imageSidebarWrapper) imageSidebarWrapper.style.display = 'none';
+    if (videoSidebarWrapper) videoSidebarWrapper.style.display = 'block';
+    if (canvasWrapper) canvasWrapper.style.display = 'none';
+    if (videoWrapper) videoWrapper.style.display = 'flex';
+    if (videoLoader) videoLoader.style.display = 'none';
+    if (videoActivityBar) videoActivityBar.style.display = 'block';
+    if (fishList) fishList.style.display = 'none';
+    if (videoTracksList) videoTracksList.style.display = 'flex';
+
+    if (detailsHeaderTitle) detailsHeaderTitle.textContent = 'BRUVs MaxN & Tracks';
+    if (metricTitle1) metricTitle1.textContent = 'MaxN (Simultaneous)';
+    if (metricTitle2) metricTitle2.textContent = 'Peak Timestamp';
+    if (metricTitle3) metricTitle3.textContent = 'Unique Tracks';
+    if (metricTitle4) metricTitle4.textContent = 'Duration Analyzed';
+    if (metricTitle5) metricTitle5.textContent = 'Processing Time';
+
+    // If no video is currently loaded in the player, preview the sample video
+    if (bruvsVideoPlayer && !bruvsVideoPlayer.getAttribute('src')) {
+      bruvsVideoPlayer.src = '/samples/sample_redsea_sohal.mp4';
+      bruvsVideoPlayer.load();
+    }
+
+    if (state.videoResults) {
+      updateVideoResultsUI(state.videoResults);
+    } else {
+      if (fishCountVal) fishCountVal.textContent = '0';
+      if (totalBiomassVal) totalBiomassVal.textContent = '--:--';
+      if (commercialYieldVal) commercialYieldVal.textContent = '0 Tracks';
+      if (shannonVal) shannonVal.textContent = '0.0 s';
+      if (latencyVal) latencyVal.textContent = '-- ms';
+      if (totalBadge) totalBadge.textContent = '0';
+
+      if (videoTracksList) {
+        videoTracksList.innerHTML = `
+          <div class="empty-state" style="padding: 28px 14px; text-align: center;">
+            <div style="font-size: 1.8rem; margin-bottom: 8px;">🎬</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #38bdf8; margin-bottom: 4px;">Video Ready for Processing</div>
+            <div style="font-size: 0.72rem; color: #94a3b8; line-height: 1.5;">
+              Preview the underwater video in the center player.<br>
+              When ready, click <strong style="color: #34d399;">"Process BRUVs Video &amp; MaxN"</strong> on the left to run detection, tracking, and peak MaxN calculation.
+            </div>
+          </div>
+        `;
+      }
+    }
+  }
+
+  if (tabImageMode) tabImageMode.addEventListener('click', switchToImageMode);
+  if (tabVideoMode) tabVideoMode.addEventListener('click', switchToVideoMode);
+
+  // 2. Video Source Handling
+  if (presetVideoSohal) {
+    presetVideoSohal.addEventListener('click', () => {
+      presetVideoSohal.classList.add('active');
+      presetVideoSohal.style.background = 'rgba(16, 185, 129, 0.1)';
+      presetVideoSohal.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+      state.selectedVideoSample = 'sample_redsea_sohal.mp4';
+      state.uploadedVideoFile = null;
+      if (videoUploadTitle) videoUploadTitle.textContent = 'Upload BRUVs Video (.mp4)';
+      if (videoUploadSubtitle) videoUploadSubtitle.textContent = 'Drag & drop or click to browse';
+
+      if (bruvsVideoPlayer) {
+        bruvsVideoPlayer.src = '/samples/sample_redsea_sohal.mp4';
+        bruvsVideoPlayer.load();
+      }
+      state.videoResults = null;
+      if (videoTracksList) {
+        videoTracksList.innerHTML = `
+          <div class="empty-state" style="padding: 28px 14px; text-align: center;">
+            <div style="font-size: 1.8rem; margin-bottom: 8px;">🎬</div>
+            <div style="font-size: 0.85rem; font-weight: 600; color: #38bdf8; margin-bottom: 4px;">Sample Video Loaded</div>
+            <div style="font-size: 0.72rem; color: #94a3b8; line-height: 1.5;">
+              Click <strong style="color: #34d399;">"Process BRUVs Video &amp; MaxN"</strong> below to begin automated video census.
+            </div>
+          </div>
+        `;
+      }
+    });
+  }
+
+  if (videoDropZone && videoFileInput) {
+    videoDropZone.addEventListener('dragover', (e) => { e.preventDefault(); videoDropZone.classList.add('dragover'); });
+    videoDropZone.addEventListener('dragleave', () => videoDropZone.classList.remove('dragover'));
+    videoDropZone.addEventListener('drop', (e) => {
+      e.preventDefault();
+      videoDropZone.classList.remove('dragover');
+      if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+        handleVideoFile(e.dataTransfer.files[0]);
+      }
+    });
+
+    videoFileInput.addEventListener('change', (e) => {
+      if (e.target.files && e.target.files[0]) {
+        handleVideoFile(e.target.files[0]);
+      }
+    });
+  }
+
+  function handleVideoFile(file) {
+    state.uploadedVideoFile = file;
+    state.selectedVideoSample = null;
+    if (presetVideoSohal) {
+      presetVideoSohal.classList.remove('active');
+      presetVideoSohal.style.background = 'transparent';
+      presetVideoSohal.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+    }
+    if (videoUploadTitle) videoUploadTitle.textContent = file.name;
+    if (videoUploadSubtitle) videoUploadSubtitle.textContent = `${(file.size / (1024 * 1024)).toFixed(1)} MB • Ready to analyze`;
+
+    if (bruvsVideoPlayer) {
+      bruvsVideoPlayer.src = URL.createObjectURL(file);
+      bruvsVideoPlayer.load();
+    }
+    state.videoResults = null;
+    if (videoTracksList) {
+      videoTracksList.innerHTML = `
+        <div class="empty-state" style="padding: 28px 14px; text-align: center;">
+          <div style="font-size: 1.8rem; margin-bottom: 8px;">🎬</div>
+          <div style="font-size: 0.85rem; font-weight: 600; color: #38bdf8; margin-bottom: 4px;">Custom Video Uploaded</div>
+          <div style="font-size: 0.72rem; color: #94a3b8; line-height: 1.5;">
+            Click <strong style="color: #34d399;">"Process BRUVs Video &amp; MaxN"</strong> on the left to analyze this video.
+          </div>
+        </div>
+      `;
+    }
+  }
+
+  // 3. Peak Frame & Timeline Seek Interaction (Pauses on seek so user can inspect frame)
+  function seekToPeakAndPause() {
+    if (bruvsVideoPlayer && state.videoResults && typeof state.videoResults.peak_second === 'number') {
+      bruvsVideoPlayer.pause();
+      bruvsVideoPlayer.currentTime = state.videoResults.peak_second;
+      if (timelineCanvas && state.videoResults.timeline) {
+        drawTimelineSparkline(timelineCanvas, state.videoResults.timeline, state.videoResults.peak_second, state.videoResults.peak_second);
+      }
+    }
+  }
+
+  if (peakFrameThumbContainer) peakFrameThumbContainer.addEventListener('click', seekToPeakAndPause);
+  if (peakTimestampBadge) {
+    peakTimestampBadge.style.cursor = 'pointer';
+    peakTimestampBadge.title = 'Click to seek video to peak MaxN and pause';
+    peakTimestampBadge.addEventListener('click', seekToPeakAndPause);
+  }
+  if (maxNCountBadge) {
+    maxNCountBadge.style.cursor = 'pointer';
+    maxNCountBadge.title = 'Click to seek video to peak MaxN and pause';
+    maxNCountBadge.addEventListener('click', seekToPeakAndPause);
+  }
+
+  if (timelineCanvas && bruvsVideoPlayer) {
+    timelineCanvas.style.cursor = 'crosshair';
+    timelineCanvas.title = 'Click anywhere on sparkline to scrub video and pause';
+    timelineCanvas.addEventListener('click', (e) => {
+      if (!state.videoResults || !state.videoResults.timeline || state.videoResults.timeline.length === 0) return;
+      const rect = timelineCanvas.getBoundingClientRect();
+      const clickX = e.clientX - rect.left;
+      const ratio = Math.max(0, Math.min(1, clickX / rect.width));
+      const timeline = state.videoResults.timeline;
+      const maxSec = timeline[timeline.length - 1].second || state.videoResults.duration_analyzed_sec || 1.0;
+      const targetSec = ratio * maxSec;
+      bruvsVideoPlayer.pause();
+      bruvsVideoPlayer.currentTime = targetSec;
+      drawTimelineSparkline(timelineCanvas, timeline, state.videoResults.peak_second, targetSec);
+    });
+  }
+
+  if (bruvsVideoPlayer) {
+    bruvsVideoPlayer.addEventListener('timeupdate', () => {
+      if (state.activeMode === 'video' && state.videoResults && state.videoResults.timeline) {
+        drawTimelineSparkline(timelineCanvas, state.videoResults.timeline, state.videoResults.peak_second, bruvsVideoPlayer.currentTime);
+      }
+    });
+  }
+
+  // 4. Run Video Analysis & MaxN
+  if (runVideoBtn) {
+    runVideoBtn.addEventListener('click', async () => {
+      const startTime = performance.now();
+      if (videoBtnSpinner) videoBtnSpinner.style.display = 'inline-block';
+      if (videoBtnText) videoBtnText.textContent = 'Tracking & Computing MaxN...';
+      if (runVideoBtn) runVideoBtn.disabled = true;
+      if (videoLoader) videoLoader.style.display = 'flex';
+      if (videoLoaderText) videoLoaderText.textContent = 'Running YOLO11s-seg + ByteTrack across video frames...';
+
+      try {
+        const formData = new FormData();
+        if (state.uploadedVideoFile) {
+          formData.append('file', state.uploadedVideoFile);
+        } else {
+          formData.append('sample_video', state.selectedVideoSample || 'sample_redsea_sohal.mp4');
+        }
+
+        formData.append('sample_fps', videoSampleFps ? videoSampleFps.value : '3.0');
+        formData.append('max_duration_sec', videoMaxDuration ? videoMaxDuration.value : '30.0');
+        formData.append('conf_threshold', confSlider ? confSlider.value : '0.35');
+        formData.append('classifier_mode', videoClassifierSelect ? videoClassifierSelect.value : 'bioclip');
+        formData.append('is_calibrated', 'true');
+        formData.append('pixels_per_cm', '22.0'); // Standard BRUVs rig scale
+        formData.append('run_classification', 'true');
+
+        const res = await fetch('/api/video/process', {
+          method: 'POST',
+          body: formData
+        });
+
+        if (!res.ok) throw new Error(`Video processing error: ${res.statusText}`);
+        const data = await res.json();
+        const elapsed = Math.round(performance.now() - startTime);
+
+        state.videoResults = data;
+        updateVideoResultsUI(data, elapsed);
+
+      } catch (err) {
+        console.error('Failed to process video:', err);
+        alert(`Video processing failed: ${err.message}`);
+      } finally {
+        if (videoBtnSpinner) videoBtnSpinner.style.display = 'none';
+        if (videoBtnText) videoBtnText.textContent = 'Process BRUVs Video & MaxN';
+        if (runVideoBtn) runVideoBtn.disabled = false;
+        if (videoLoader) videoLoader.style.display = 'none';
+      }
+    });
+  }
+
+  function updateVideoResultsUI(data, elapsedMs = null) {
+    if (bruvsVideoPlayer && data.video_url) {
+      bruvsVideoPlayer.src = data.video_url;
+      bruvsVideoPlayer.load();
+    }
+
+    if (peakFrameImg && data.peak_frame_url) {
+      peakFrameImg.src = data.peak_frame_url;
+      peakFrameImg.style.display = 'block';
+      if (peakFramePlaceholder) peakFramePlaceholder.style.display = 'none';
+    }
+
+    if (peakTimestampBadge) {
+      peakTimestampBadge.textContent = `Timestamp: ${data.peak_timestamp} (${data.peak_second}s)`;
+    }
+
+    if (maxNCountBadge) {
+      maxNCountBadge.textContent = `MaxN: ${data.max_n_total} Fish (Simultaneous)`;
+    }
+
+    if (timelineDurationText) {
+      timelineDurationText.textContent = `00:00 - ${data.duration_analyzed_sec}s (${data.frames_analyzed} frames)`;
+    }
+
+    // Update 5 Metrics Cards
+    if (fishCountVal) {
+      fishCountVal.textContent = data.max_n_total;
+      fishCountVal.style.color = '#38bdf8';
+    }
+    if (totalBiomassVal) {
+      totalBiomassVal.textContent = data.peak_timestamp;
+      totalBiomassVal.style.color = '#10b981';
+    }
+    if (commercialYieldVal) {
+      commercialYieldVal.textContent = `${data.unique_tracks_count} Tracks`;
+      commercialYieldVal.style.color = '#a78bfa';
+    }
+    if (shannonVal) {
+      shannonVal.textContent = `${data.duration_analyzed_sec} s`;
+      shannonVal.style.color = '#f59e0b';
+    }
+    if (latencyVal && elapsedMs) {
+      latencyVal.textContent = `${(elapsedMs / 1000).toFixed(1)} s`;
+    }
+
+    if (totalBadge) {
+      totalBadge.textContent = data.unique_tracks_count;
+    }
+
+    // Draw Density Sparkline
+    if (timelineCanvas && data.timeline) {
+      drawTimelineSparkline(timelineCanvas, data.timeline, data.peak_second);
+    }
+
+    // Render Tracked Organisms
+    if (videoTracksList) {
+      renderVideoTracksList(data);
+    }
+  }
+
+  function drawTimelineSparkline(canvasEl, timeline, peakSec, currentSec = null) {
+    const ctxT = canvasEl.getContext('2d');
+    const w = canvasEl.width;
+    const h = canvasEl.height;
+    ctxT.clearRect(0, 0, w, h);
+
+    if (!timeline || timeline.length === 0) return;
+
+    const maxCount = Math.max(1, ...timeline.map(p => p.count));
+    const stepX = w / Math.max(1, timeline.length - 1);
+    const maxSec = timeline[timeline.length - 1].second || 1.0;
+
+    // Draw baseline
+    ctxT.strokeStyle = 'rgba(255, 255, 255, 0.08)';
+    ctxT.lineWidth = 1;
+    ctxT.beginPath();
+    ctxT.moveTo(0, h - 4);
+    ctxT.lineTo(w, h - 4);
+    ctxT.stroke();
+
+    // Fill gradient area under density curve
+    const grad = ctxT.createLinearGradient(0, 0, 0, h);
+    grad.addColorStop(0, 'rgba(56, 189, 248, 0.35)');
+    grad.addColorStop(1, 'rgba(56, 189, 248, 0.02)');
+
+    ctxT.beginPath();
+    ctxT.moveTo(0, h - 4);
+    timeline.forEach((pt, i) => {
+      const x = i * stepX;
+      const y = (h - 6) - (pt.count / maxCount) * (h - 12);
+      ctxT.lineTo(x, y);
+    });
+    ctxT.lineTo(w, h - 4);
+    ctxT.closePath();
+    ctxT.fillStyle = grad;
+    ctxT.fill();
+
+    // Stroke line
+    ctxT.strokeStyle = '#38bdf8';
+    ctxT.lineWidth = 1.6;
+    ctxT.beginPath();
+    timeline.forEach((pt, i) => {
+      const x = i * stepX;
+      const y = (h - 6) - (pt.count / maxCount) * (h - 12);
+      if (i === 0) ctxT.moveTo(x, y);
+      else ctxT.lineTo(x, y);
+    });
+    ctxT.stroke();
+
+    // Highlight Peak Frame with a vertical marker
+    if (typeof peakSec === 'number') {
+      const peakX = Math.min(w - 2, Math.max(2, (peakSec / maxSec) * w));
+      ctxT.strokeStyle = '#10b981';
+      ctxT.lineWidth = 2;
+      ctxT.beginPath();
+      ctxT.moveTo(peakX, 2);
+      ctxT.lineTo(peakX, h - 2);
+      ctxT.stroke();
+
+      // Peak circle
+      ctxT.fillStyle = '#10b981';
+      ctxT.beginPath();
+      ctxT.arc(peakX, 4, 3, 0, Math.PI * 2);
+      ctxT.fill();
+    }
+
+    // Current playhead scrubber
+    if (typeof currentSec === 'number' && currentSec >= 0) {
+      const curX = Math.min(w - 2, Math.max(2, (currentSec / maxSec) * w));
+      ctxT.strokeStyle = '#f8fafc';
+      ctxT.lineWidth = 1.5;
+      ctxT.setLineDash([2, 2]);
+      ctxT.beginPath();
+      ctxT.moveTo(curX, 2);
+      ctxT.lineTo(curX, h - 2);
+      ctxT.stroke();
+      ctxT.setLineDash([]);
+    }
+  }
+
+  function renderVideoTracksList(data) {
+    videoTracksList.innerHTML = '';
+
+    // 1. MaxN Ecological Breakdown Card
+    const famBox = document.createElement('div');
+    famBox.className = 'maxn-summary-card';
+    
+    let famListHtml = '';
+    const famBreakdown = data.max_n_by_family || {};
+    for (const [fam, cnt] of Object.entries(famBreakdown)) {
+      famListHtml += `
+        <div class="maxn-family-row">
+          <span class="maxn-family-name">${fam}</span>
+          <span class="maxn-family-count">MaxN = ${cnt} fish</span>
+        </div>
+      `;
+    }
+
+    famBox.innerHTML = `
+      <div class="maxn-summary-title">
+        <span>MaxN Ecological Census</span>
+        <span class="pill-badge pill-cyan">Peak @ ${data.peak_timestamp}</span>
+      </div>
+      <div class="maxn-summary-sub">
+        Highest simultaneous count in a single frame. Guarantees zero double-counting across the survey.
+      </div>
+      <div style="display: flex; flex-direction: column; gap: 4px; margin-top: 4px;">
+        ${famListHtml}
+      </div>
+    `;
+    videoTracksList.appendChild(famBox);
+
+    // 2. Individual Tracked Fish
+    const tracks = data.tracks || [];
+    if (tracks.length === 0) {
+      videoTracksList.innerHTML += `
+        <div class="empty-state" style="padding: 24px 12px;">
+          <span style="color: #94a3b8; font-size: 0.74rem;">No persistent fish tracks identified in analyzed duration.</span>
+        </div>
+      `;
+      return;
+    }
+
+    tracks.forEach(tr => {
+      const card = document.createElement('div');
+      card.className = `video-track-card ${tr.in_peak_frame ? 'peak-track' : ''}`;
+      card.title = "Click to jump video to this fish's first appearance";
+
+      const peakBadge = tr.in_peak_frame
+        ? `<span class="pill-badge" style="background: rgba(16, 185, 129, 0.2); color: #34d399; border: 1px solid rgba(16, 185, 129, 0.4);">Present at MaxN Peak</span>`
+        : `<span class="pill-badge" style="background: rgba(148, 163, 184, 0.1); color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.2);">Passerby Track</span>`;
+
+      const bio = tr.biomass || {};
+      const lenText = bio.fork_length_cm ? `${bio.fork_length_cm} cm` : `${bio.length_px || '--'} px (Uncalibrated)`;
+      const wtText = bio.biomass_g ? `${bio.biomass_g} g` : 'Requires Scale';
+
+      card.innerHTML = `
+        <div class="video-track-header">
+          <div class="video-track-title">
+            <span>Fish #${tr.track_id} ${tr.family}</span>
+            ${peakBadge}
+          </div>
+          <span class="pill-badge pill-green">${Math.round(tr.confidence * 100)}% conf</span>
+        </div>
+
+        <div class="video-track-timing">
+          <span>Active:</span> ${tr.first_seen} → ${tr.last_seen} (${tr.duration_sec}s • ${tr.frame_appearances} frames)
+        </div>
+
+        <div class="video-track-grid">
+          <div>
+            <span>Est. Fork Length</span>
+            <strong>${lenText}</strong>
+          </div>
+          <div>
+            <span>Biomass Weight</span>
+            <strong>${wtText}</strong>
+          </div>
+          <div>
+            <span>Commercial Species</span>
+            <strong style="color: ${tr.is_commercial ? '#34d399' : '#cbd5e1'};">${tr.is_commercial ? 'Yes (Targeted)' : 'No (Non-target)'}</strong>
+          </div>
+          <div>
+            <span>Tracking Method</span>
+            <strong style="color: #38bdf8;">ByteTrack Kalman</strong>
+          </div>
+        </div>
+      `;
+
+      card.addEventListener('click', () => {
+        // Highlight active track card
+        document.querySelectorAll('.video-track-card').forEach(c => c.classList.remove('selected'));
+        card.classList.add('selected');
+
+        if (bruvsVideoPlayer && typeof tr.first_seen === 'string') {
+          const parts = tr.first_seen.split(':');
+          if (parts.length === 2) {
+            const sec = parseFloat(parts[0]) * 60 + parseFloat(parts[1]);
+            bruvsVideoPlayer.pause();
+            bruvsVideoPlayer.currentTime = sec;
+            if (timelineCanvas && data.timeline) {
+              drawTimelineSparkline(timelineCanvas, data.timeline, data.peak_second, sec);
+            }
+          }
+        }
+      });
+
+      videoTracksList.appendChild(card);
+    });
+  }
+}
+

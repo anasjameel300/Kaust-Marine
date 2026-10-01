@@ -37,7 +37,14 @@
     
     <!-- Left Sidebar: Controls & Upload -->
     <aside class="sidebar-panel">
-      <!-- Input Imagery -->
+      <!-- Mode Tabs: Static Imagery vs BRUVs Video -->
+      <div class="mode-tabs" style="display: flex; gap: 6px; margin-bottom: 12px; background: rgba(15, 23, 42, 0.7); padding: 4px; border-radius: 6px; border: 1px solid rgba(255, 255, 255, 0.08);">
+        <button type="button" id="tabImageMode" class="btn-tab active" style="flex: 1; padding: 7px 10px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; background: #1e293b; color: #f8fafc; font-weight: 500;">Static Imagery</button>
+        <button type="button" id="tabVideoMode" class="btn-tab" style="flex: 1; padding: 7px 10px; font-size: 0.75rem; border-radius: 4px; border: none; cursor: pointer; background: transparent; color: #94a3b8; font-weight: 500;">BRUVs Video (MaxN)</button>
+      </div>
+
+      <div id="imageSidebarWrapper">
+        <!-- Input Imagery -->
       <div class="card">
         <h2 class="card-title">Image Source</h2>
         
@@ -193,6 +200,85 @@
           <span id="btnText">Re-Run Segmentation</span>
         </button>
       </div>
+      </div><!-- /imageSidebarWrapper -->
+
+      <!-- Video Mode Sidebar Controls -->
+      <div id="videoSidebarWrapper" style="display: none;">
+        <!-- Video Source Card -->
+        <div class="card">
+          <h2 class="card-title">Video Source</h2>
+          
+          <div class="upload-dropzone" id="videoDropZone">
+            <input type="file" id="videoFileInput" accept="video/mp4,video/quicktime,video/webm" style="display:none;">
+            <div class="drop-content" onclick="document.getElementById('videoFileInput').click()">
+              <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8">
+                <polygon points="23 7 16 12 23 17 23 7"></polygon>
+                <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+              </svg>
+              <span id="videoUploadTitle">Upload BRUVs Video (.mp4)</span>
+              <small id="videoUploadSubtitle">Drag &amp; drop or click to browse</small>
+            </div>
+          </div>
+
+          <div class="preset-selector" style="margin-top: 10px;">
+            <label>Sample BRUVs Feeds</label>
+            <div id="videoPresetList" style="display: flex; flex-direction: column; gap: 6px;">
+              <div class="video-preset-item active" id="presetVideoSohal" style="padding: 8px 10px; background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.35); border-radius: 6px; cursor: pointer; display: flex; align-items: center; justify-content: space-between;">
+                <div>
+                  <strong style="display: block; font-size: 0.74rem; color: #f8fafc;">Red Sea Sohal Surgeonfish</strong>
+                  <small style="color: #94a3b8; font-size: 0.65rem;">Acanthurus sohal • In-Situ Reef</small>
+                </div>
+                <span class="mono-badge" style="font-size: 0.62rem; color: #10b981;">60 FPS</span>
+              </div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Video MaxN Settings Card -->
+        <div class="card">
+          <h2 class="card-title">BRUVs MaxN Settings</h2>
+
+          <div class="control-group">
+            <label class="control-label" for="videoSampleFps">Temporal Sampling Rate</label>
+            <select id="videoSampleFps" class="form-select">
+              <option value="2">2 FPS (Fast Tracking)</option>
+              <option value="3" selected>3 FPS (Balanced Default)</option>
+              <option value="5">5 FPS (High Precision)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label" for="videoMaxDuration">Max Duration to Analyze</label>
+            <select id="videoMaxDuration" class="form-select">
+              <option value="15">15 Seconds (Quick Demo)</option>
+              <option value="30" selected>30 Seconds (Standard Block)</option>
+              <option value="60">60 Seconds (Full Sequence)</option>
+            </select>
+          </div>
+
+          <div class="control-group">
+            <label class="control-label" for="videoClassifierSelect">Taxonomic Classifier</label>
+            <select id="videoClassifierSelect" class="form-select">
+              <option value="bioclip" selected>BioCLIP + LoRA (Wild Champion)</option>
+              <option value="ensemble">Scientific Ensemble</option>
+              <option value="resnet50">ResNet50d</option>
+            </select>
+          </div>
+
+          <div class="section-box" style="margin-bottom: 10px;">
+            <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 4px;">
+              <label class="control-label" style="margin-bottom: 0;">BRUVs Rig Calibration</label>
+              <span class="mono-badge" style="font-size: 0.62rem; color: #10b981;">22 px/cm</span>
+            </div>
+            <small style="display: block; color: #94a3b8; font-size: 0.65rem;">Calibrated for standard 1.2m rigid bait arm</small>
+          </div>
+
+          <button type="button" class="btn btn-primary" id="runVideoBtn" style="margin-top: 6px; width: 100%;">
+            <span class="btn-spinner" id="videoBtnSpinner" style="display: none;"></span>
+            <span id="videoBtnText">Process BRUVs Video &amp; MaxN</span>
+          </button>
+        </div>
+      </div><!-- /videoSidebarWrapper -->
     </aside>
 
     <!-- Center: Interactive Canvas Visualizer -->
@@ -214,26 +300,60 @@
         </div>
       </div>
 
+      <!-- Center: BRUVs Video Player (Video Mode) -->
+      <div class="video-wrapper" id="videoWrapper" style="display: none; position: relative; width: 100%; min-height: 480px; background: #000; border-radius: 6px; overflow: hidden; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+        <video id="bruvsVideoPlayer" controls playsinline style="width: 100%; max-height: 520px; background: #000; border-radius: 4px;"></video>
+        <div class="canvas-loader" id="videoLoader" style="display: none; position: absolute; inset: 0; background: rgba(7, 11, 20, 0.88); z-index: 10; display: flex; flex-direction: column; align-items: center; justify-content: center;">
+          <div class="spinner"></div>
+          <p id="videoLoaderText" style="margin-top: 12px; font-size: 0.85rem; color: #38bdf8;">Tracking &amp; Computing MaxN across video frames...</p>
+        </div>
+      </div>
+
+      <!-- MaxN Peak Activity Bar (Video Mode) -->
+      <div id="videoActivityBar" style="display: none; margin-top: 10px; background: rgba(15, 23, 42, 0.8); border: 1px solid rgba(56, 189, 248, 0.25); border-radius: 6px; padding: 10px 14px;">
+        <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 8px;">
+          <div style="display: flex; align-items: center; gap: 8px;">
+            <span class="mono-badge" style="background: rgba(16, 185, 129, 0.15); color: #10b981; font-weight: 600;">MaxN Peak Frame</span>
+            <span id="peakTimestampBadge" style="font-size: 0.72rem; color: #94a3b8;">Timestamp: --:--</span>
+          </div>
+          <span id="maxNCountBadge" style="font-size: 0.76rem; color: #38bdf8; font-weight: 600;">MaxN: 0 Fish</span>
+        </div>
+        <div style="display: flex; gap: 12px; align-items: center;">
+          <div id="peakFrameThumbContainer" style="width: 100px; height: 56px; border-radius: 4px; overflow: hidden; border: 1px solid rgba(56, 189, 248, 0.4); cursor: pointer; flex-shrink: 0; background: #000;" title="Click to seek to peak frame">
+            <img id="peakFrameImg" src="" alt="Peak Frame" style="width: 100%; height: 100%; object-fit: cover; display: none;">
+            <div id="peakFramePlaceholder" style="width: 100%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 0.60rem; color: #64748b;">No Peak</div>
+          </div>
+          <div style="flex: 1;">
+            <div style="display: flex; justify-content: space-between; font-size: 0.65rem; color: #94a3b8; margin-bottom: 3px;">
+              <span>Simultaneous Fish Density</span>
+              <span id="timelineDurationText">00:00 - 00:00</span>
+            </div>
+            <!-- Mini Canvas for Temporal Density Sparkline -->
+            <canvas id="timelineCanvas" width="400" height="38" style="width: 100%; height: 38px; background: rgba(7, 11, 20, 0.6); border-radius: 3px; border: 1px solid rgba(255,255,255,0.06);"></canvas>
+          </div>
+        </div>
+      </div>
+
       <!-- Real-Time Ecological & Morphometrics Bar -->
       <div class="metrics-bar">
         <div class="metric-card">
-          <span class="metric-title">Fish Count</span>
+          <span class="metric-title" id="metricTitle1">Fish Count</span>
           <strong class="metric-value" style="color: var(--color-fish);" id="fishCountVal">0</strong>
         </div>
         <div class="metric-card">
-          <span class="metric-title">Total Biomass (W)</span>
+          <span class="metric-title" id="metricTitle2">Total Biomass (W)</span>
           <strong class="metric-value" style="color: var(--accent-cyan);" id="totalBiomassVal">0.00 kg</strong>
         </div>
         <div class="metric-card">
-          <span class="metric-title">Commercial Catch</span>
+          <span class="metric-title" id="metricTitle3">Commercial Catch</span>
           <strong class="metric-value" style="color: var(--color-reefs);" id="commercialYieldVal">0.00 kg (0%)</strong>
         </div>
         <div class="metric-card">
-          <span class="metric-title">Diversity Index (H')</span>
+          <span class="metric-title" id="metricTitle4">Diversity Index (H')</span>
           <strong class="metric-value" style="color: #a78bfa;" id="shannonVal">0.00</strong>
         </div>
         <div class="metric-card">
-          <span class="metric-title">Latency</span>
+          <span class="metric-title" id="metricTitle5">Latency</span>
           <strong class="metric-value" style="color: var(--text-secondary);" id="latencyVal">-- ms</strong>
         </div>
       </div>
@@ -243,13 +363,19 @@
     <aside class="details-panel">
       <div class="card full-height">
         <div class="details-header">
-          <h2>Detected Instances</h2>
+          <h2 id="detailsHeaderTitle">Detected Instances</h2>
           <span id="totalBadge" class="mono-badge">0</span>
         </div>
         
         <div class="fish-list" id="fishList">
           <div class="empty-state">
             <span>No detections to display.<br>Select a sample or upload an image on the left.</span>
+          </div>
+        </div>
+
+        <div class="video-tracks-list" id="videoTracksList" style="display: none;">
+          <div class="empty-state">
+            <span>No video tracks to display.<br>Click 'Process BRUVs Video &amp; MaxN' on the left.</span>
           </div>
         </div>
       </div>

@@ -12,6 +12,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from ultralytics import YOLO
 from app.taxonomic_engine import taxonomic_engine
 from app.biomass_engine import biomass_engine, CALIBRATION_PRESETS
+from app.video_engine import video_engine
 
 app = FastAPI(title="KAUST Marine Fish Instance Segmentation & Stock Assessment Portal")
 
@@ -448,6 +449,72 @@ async def run_segmentation(
             "community_metrics": community_metrics,
             "detections": detections
         })
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/api/videos")
+async def get_sample_videos():
+    samples_dir = BASE_DIR / "samples"
+    video_files = sorted([f for f in os.listdir(samples_dir) if f.lower().endswith(('.mp4', '.mov', '.webm', '.avi'))])
+    videos = []
+    for vf in video_files:
+        title = "Red Sea Sohal Surgeonfish (Acanthurus sohal)" if "sohal" in vf.lower() else vf
+        videos.append({
+            "filename": vf,
+            "title": title,
+            "url": f"/samples/{vf}"
+        })
+    return JSONResponse(videos)
+
+@app.post("/api/video/process")
+async def process_video_endpoint(
+    file: UploadFile = File(None),
+    sample_video: str = Form(None),
+    sample_fps: float = Form(3.0),
+    max_duration_sec: float = Form(30.0),
+    conf_threshold: float = Form(0.35),
+    is_calibrated: bool = Form(False),
+    pixels_per_cm: float = Form(22.0),
+    run_classification: bool = Form(True),
+    classifier_mode: str = Form("bioclip")
+):
+    try:
+        # Determine source video file path
+        if file and file.filename:
+            save_name = f"upload_{uuid.uuid4().hex[:8]}_{file.filename}"
+            save_path = BASE_DIR / "uploads" / save_name
+            contents = await file.read()
+            with open(save_path, "wb") as f:
+                f.write(contents)
+            input_video_path = str(save_path)
+        elif sample_video:
+            sample_path = BASE_DIR / "samples" / sample_video
+            if not sample_path.exists():
+                raise HTTPException(status_code=404, detail="Sample video not found")
+            input_video_path = str(sample_path)
+        else:
+            # Fallback to default sample if available
+            default_sample = BASE_DIR / "samples" / "sample_redsea_sohal.mp4"
+            if default_sample.exists():
+                input_video_path = str(default_sample)
+            else:
+                raise HTTPException(status_code=400, detail="No video file or sample specified")
+
+        # Execute video processing with ByteTrack and MaxN engine
+        results = video_engine.process_video(
+            video_path=input_video_path,
+            sample_fps=sample_fps,
+            max_duration_sec=max_duration_sec,
+            conf_threshold=conf_threshold,
+            is_calibrated=is_calibrated,
+            pixels_per_cm=pixels_per_cm,
+            run_classification=run_classification,
+            classifier_mode=classifier_mode
+        )
+        return JSONResponse(results)
 
     except Exception as e:
         import traceback

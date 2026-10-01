@@ -254,3 +254,31 @@ We assembled a dedicated Out-of-Distribution (OOD) test benchmark of **250 resea
 5. **Research Transparency & Interactive Eye Modal (`👁`):**
    - Integrated an interactive eye indicator (`👁`) in both the sidebar control panel and each organism instance card.
    - Provides instant scientific context on why isolated sub-crops can exhibit semantic ambiguity on whole-organism backbones and how Adaptive Anchor Gating preserves verification integrity, outlining future end-to-end multi-task part training.
+
+---
+
+## 9. Scientific Calibration Confirmation & In-Situ BRUVs Video MaxN Engine
+
+### 9.1 Resolving Scale Ambiguity with Explicit Calibration Confirmation
+* **The Problem:** Random field photos lack intrinsic scale. Previously, the platform defaulted to 25 px/cm, generating misleading metric fork lengths and weights for arbitrary uploads.
+* **The Solution:** Implemented a strict 3-tier calibration workflow:
+  1. **Tier 1 (Uncalibrated on Load):** All images load in an uncalibrated state. Metric units remain locked; cards display pixel dimensions (`420 px`) with amber warnings.
+  2. **Tier 2 (User Confirmation Gate):** The researcher selects their rig setup (e.g. BRUVs 22 px/cm or Catch Board 35 px/cm) and explicitly clicks **"Confirm Calibration Scale"** to unlock metric fork lengths ($L_{\text{cm}}$).
+  3. **Tier 3 (Taxonomic Sizing):** If unclassified, biomass displays as `Heuristic (ID needed)`. Once classified, it dynamically applies family-specific FishBase allometric parameters ($W = a \cdot L^b$).
+
+### 9.2 In-Situ BRUVs Video Tracking & The MaxN Ecological Standard
+* **The Double-Counting Challenge:** In underwater BRUVs video (Dr. Renato Morais), the same individual fish enters and leaves the frame repeatedly. Summing frame-by-frame detections creates severe overcounting.
+* **The Ecological Standard (MaxN):**
+  - MaxN is defined as the maximum number of individuals of a species visible simultaneously in any single frame of the entire video sequence.
+  - Because all counted individuals are on screen at the exact same moment, double-counting is mathematically impossible.
+* **Implementation (`app/video_engine.py` & `scripts/process_bruvs_video.py`):**
+  - **Temporal Sub-Sampling (2–4 FPS):** Dramatically reduces latency while capturing all entries and exits.
+  - **ByteTrack Tracking:** Assigns persistent IDs (`Fish #1`, `Fish #2`) across frames, picking the single highest-confidence crop per track for Stage 2 taxonomic classification.
+  - **MaxN Summary:** Computes global MaxN, per-family MaxN, and logs the exact timestamp of peak community activity.
+  - **Interactive Web Dashboard:** Added a dedicated BRUVs Video tab with an HTML5 video player, clickable peak keyframe snapshot seek, and a temporal fish density sparkline.
+  - **Test Clip Ingestion (`scripts/download_sample_video.py`):** Ingested verified Red Sea *Acanthurus sohal* footage (`sample_redsea_sohal.mp4`, 60 FPS, 19.6 MB).
+* **Browser Video Playback & Sidebar Usability Fixes:**
+  - **H.264 Web Transcoding:** OpenCV's native `mp4v` codec caused browsers to show a black screen. Added automated FFmpeg pipeline (`libx264` + `yuv420p` + `+faststart`) to produce web-compliant video outputs instantly.
+  - **Sidebar Layout Overhaul:** Fixed missing CSS flex direction that caused cards to squeeze horizontally. Created dedicated `.maxn-summary-card` and `.video-track-card` classes with vertical stacking, clean contrast, and readable data fields.
+  - **On-Demand Processing Workflow:** Preserved intentional on-demand trigger ("Process BRUVs Video & MaxN") while enabling instant input video preview and a clear "Ready to Analyze" status on initial load.
+

@@ -7,6 +7,8 @@ const state = {
   detections: [],
   selectedId: null,
   hoveredId: null,
+  isCalibrated: false,
+  isClassified: false,
   counts: { fish: 0, reefs: 0, human_divers: 0 },
   filters: {
     fish: true,
@@ -63,6 +65,35 @@ const classifierSelect = document.getElementById('classifierSelect');
 const presetSelect = document.getElementById('presetSelect');
 const scaleSlider = document.getElementById('scaleSlider');
 const scaleValue = document.getElementById('scaleValue');
+const calibStatusBadge = document.getElementById('calibStatusBadge');
+const confirmCalibBtn = document.getElementById('confirmCalibBtn');
+const confirmCalibBtnText = document.getElementById('confirmCalibBtnText');
+
+function updateCalibUI() {
+  if (!calibStatusBadge || !confirmCalibBtnText) return;
+  if (state.isCalibrated) {
+    const scale = parseFloat(scaleSlider ? scaleSlider.value : 25.0).toFixed(1);
+    calibStatusBadge.textContent = `Calibrated (${scale} px/cm)`;
+    calibStatusBadge.style.color = '#10b981';
+    calibStatusBadge.style.background = 'rgba(16, 185, 129, 0.15)';
+    calibStatusBadge.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+    confirmCalibBtnText.textContent = 'Modify / Reset Scale';
+    if (confirmCalibBtn) {
+      confirmCalibBtn.style.color = '#94a3b8';
+      confirmCalibBtn.style.borderColor = 'rgba(148, 163, 184, 0.3)';
+    }
+  } else {
+    calibStatusBadge.textContent = 'Uncalibrated';
+    calibStatusBadge.style.color = '#fbbf24';
+    calibStatusBadge.style.background = 'rgba(245, 158, 11, 0.12)';
+    calibStatusBadge.style.borderColor = 'rgba(245, 158, 11, 0.25)';
+    confirmCalibBtnText.textContent = 'Confirm Calibration Scale';
+    if (confirmCalibBtn) {
+      confirmCalibBtn.style.color = '#38bdf8';
+      confirmCalibBtn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+    }
+  }
+}
 
 const showReefs = document.getElementById('showReefs');
 const showDivers = document.getElementById('showDivers');
@@ -164,6 +195,14 @@ function setupEventListeners() {
     });
   }
 
+  if (confirmCalibBtn) {
+    confirmCalibBtn.addEventListener('click', () => {
+      state.isCalibrated = !state.isCalibrated;
+      updateCalibUI();
+      runSegmentation(state.isClassified);
+    });
+  }
+
   if (presetSelect) {
     presetSelect.addEventListener('change', (e) => {
       const p = e.target.value;
@@ -174,7 +213,9 @@ function setupEventListeners() {
         scaleSlider.value = 35.0;
         scaleValue.textContent = '35.0';
       }
-      runSegmentation();
+      if (state.isCalibrated) {
+        runSegmentation(state.isClassified);
+      }
     });
   }
 
@@ -186,7 +227,9 @@ function setupEventListeners() {
       if (presetSelect && presetSelect.value !== 'custom') {
         presetSelect.value = 'custom';
       }
-      runSegmentation();
+      if (state.isCalibrated) {
+        runSegmentation(state.isClassified);
+      }
     });
   }
 
@@ -286,6 +329,8 @@ function loadImageAndSegment(url) {
   state.selectedId = null;
   state.hoveredId = null;
   state.isClassified = false;
+  state.isCalibrated = false;
+  updateCalibUI();
   if (classifyBadge) {
     classifyBadge.textContent = 'On-Demand';
     classifyBadge.style.color = 'var(--accent-cyan)';
@@ -361,6 +406,7 @@ async function runSegmentation(runClassify = false) {
     if (scaleSlider) {
       formData.append('pixels_per_cm', scaleSlider.value);
     }
+    formData.append('is_calibrated', state.isCalibrated ? 'true' : 'false');
 
     const res = await fetch('/api/segment', {
       method: 'POST',
@@ -390,9 +436,26 @@ async function runSegmentation(runClassify = false) {
     // Update Community Metrics (Biomass, Catch, Shannon Diversity)
     if (data.community_metrics) {
       const cm = data.community_metrics;
-      if (totalBiomassVal) totalBiomassVal.textContent = `${cm.total_biomass_kg.toFixed(2)} kg`;
-      if (commercialYieldVal) commercialYieldVal.textContent = `${cm.commercial_biomass_kg.toFixed(2)} kg (${Math.round(cm.commercial_ratio_pct)}%)`;
-      if (shannonVal) shannonVal.textContent = cm.shannon_diversity_index.toFixed(2);
+      if (cm.is_calibrated && cm.total_biomass_kg !== null) {
+        if (totalBiomassVal) {
+          totalBiomassVal.textContent = `${cm.total_biomass_kg.toFixed(2)} kg`;
+          totalBiomassVal.style.color = 'var(--accent-cyan)';
+        }
+        if (commercialYieldVal) {
+          commercialYieldVal.textContent = `${cm.commercial_biomass_kg.toFixed(2)} kg (${Math.round(cm.commercial_ratio_pct)}%)`;
+          commercialYieldVal.style.color = 'var(--color-reefs)';
+        }
+      } else {
+        if (totalBiomassVal) {
+          totalBiomassVal.textContent = 'Uncalibrated';
+          totalBiomassVal.style.color = '#fbbf24';
+        }
+        if (commercialYieldVal) {
+          commercialYieldVal.textContent = 'Pending Scale';
+          commercialYieldVal.style.color = '#94a3b8';
+        }
+      }
+      if (shannonVal) shannonVal.textContent = (cm.shannon_diversity_index || 0).toFixed(2);
     }
 
     if (runClassify) {
@@ -501,7 +564,7 @@ function drawBadge(det, palette, isActive) {
   });
 
   let label = `${det.class_name.toUpperCase()} ${Math.round(det.confidence * 100)}%`;
-  let subText = `${Math.round(det.oriented_length_px)}px • ${Math.round(det.area_px)}px²`;
+  let subText = `${Math.round(det.oriented_length_px)}px • Uncalibrated`;
 
   if (det.taxonomy && det.taxonomy.family) {
     const fam = det.taxonomy.family;
@@ -509,9 +572,13 @@ function drawBadge(det, palette, isActive) {
     const taxConf = Math.round((det.taxonomy.confidence || 0) * 100);
     const isVer = det.taxonomy.is_verified !== false;
     label = isVer ? `${fam}${cname} ${taxConf}%` : `Unverified (Guess: ${fam} ${taxConf}%)`;
-    if (det.biomass && det.biomass.fork_length_cm) {
+    if (det.biomass && det.biomass.is_calibrated && det.biomass.fork_length_cm) {
       subText = `L=${det.biomass.fork_length_cm}cm • W=${det.biomass.biomass_g}g`;
+    } else {
+      subText = `${Math.round(det.oriented_length_px)}px • Uncalibrated`;
     }
+  } else if (det.biomass && det.biomass.is_calibrated && det.biomass.fork_length_cm) {
+    subText = `L=${det.biomass.fork_length_cm}cm • W≈${det.biomass.biomass_g}g*`;
   }
 
   ctx.save();
@@ -609,21 +676,35 @@ function updateSidebar() {
       `;
     }
 
-    const bioHtml = det.biomass ? `
-      <div class="instance-grid">
-        <span>Length<strong>${det.biomass.fork_length_cm} cm</strong></span>
-        <span>Depth<strong>${det.biomass.body_depth_cm} cm</strong></span>
-        <span>Biomass<strong>${det.biomass.biomass_g} g</strong></span>
-        <span>Aspect<strong>${det.biomass.aspect_ratio}</strong></span>
-      </div>
-    ` : `
-      <div class="instance-grid">
-        <span>Length<strong>${det.oriented_length_px} px</strong></span>
-        <span>Depth<strong>${det.body_depth_px} px</strong></span>
-        <span>Area<strong>${Math.round(det.area_px)} px²</strong></span>
-        <span>Points<strong>${det.polygon.length}</strong></span>
-      </div>
-    `;
+    let bioHtml = '';
+    if (det.biomass && det.biomass.is_calibrated && det.biomass.fork_length_cm) {
+      const isTaxBio = det.biomass.is_taxonomic_classified;
+      const weightLabel = isTaxBio ? `${det.biomass.biomass_g} g` : `~${det.biomass.biomass_g} g*`;
+      const weightSub = isTaxBio
+        ? `<small style="display:block; font-size:0.58rem; color:#34d399;">FishBase Allometric</small>`
+        : `<small style="display:block; font-size:0.58rem; color:#fbbf24;">Heuristic (ID needed)</small>`;
+      bioHtml = `
+        <div class="instance-grid">
+          <span>Length<strong>${det.biomass.fork_length_cm} cm</strong></span>
+          <span>Depth<strong>${det.biomass.body_depth_cm} cm</strong></span>
+          <span>Biomass<strong>${weightLabel}</strong>${weightSub}</span>
+          <span>Aspect<strong>${det.biomass.aspect_ratio}</strong></span>
+        </div>
+      `;
+    } else {
+      const asp = (det.oriented_length_px / Math.max(1, det.body_depth_px)).toFixed(2);
+      bioHtml = `
+        <div class="instance-grid">
+          <span>Length<strong>${Math.round(det.oriented_length_px)} px</strong></span>
+          <span>Depth<strong>${Math.round(det.body_depth_px)} px</strong></span>
+          <span>Area<strong>${Math.round(det.area_px)} px²</strong></span>
+          <span>Aspect<strong>${asp}</strong></span>
+        </div>
+        <div style="font-size: 0.62rem; color: #fbbf24; margin-top: 4px; padding: 4px 6px; background: rgba(245, 158, 11, 0.08); border-radius: 4px; border: 1px dashed rgba(245, 158, 11, 0.25);">
+          ⚠️ Optical scale unconfirmed — Confirm calibration scale above to unlock cm &amp; g.
+        </div>
+      `;
+    }
 
     card.innerHTML = `
       <div class="instance-header">

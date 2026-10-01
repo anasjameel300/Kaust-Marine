@@ -337,7 +337,8 @@ async def run_segmentation(
     classifier_mode: str = Form("bioclip"),
     enable_dual_crop: bool = Form(True),
     calibration_preset: str = Form("custom"),
-    pixels_per_cm: float = Form(25.0)
+    pixels_per_cm: float = Form(25.0),
+    is_calibrated: bool = Form(False)
 ):
     try:
         # Load image from upload or preset
@@ -404,13 +405,15 @@ async def run_segmentation(
                     fb_a = 0.0200
                     fb_b = 3.00
 
-                # Compute individual biomass morphometrics
+                # Compute individual biomass morphometrics with explicit is_calibrated gate
                 bio_res = biomass_engine.calculate_individual_morphometrics(
                     oriented_length_px=d.get("oriented_length_px", 10.0),
                     body_depth_px=d.get("body_depth_px", 5.0),
                     pixels_per_cm=pixels_per_cm,
                     fb_a=fb_a,
-                    fb_b=fb_b
+                    fb_b=fb_b,
+                    is_calibrated=is_calibrated,
+                    is_taxonomic_classified=run_classification
                 )
                 d["biomass"] = bio_res
             else:
@@ -418,7 +421,7 @@ async def run_segmentation(
                 d["biomass"] = None
 
         # Compute Community Ecological Metrics
-        community_metrics = biomass_engine.calculate_community_metrics(detections)
+        community_metrics = biomass_engine.calculate_community_metrics(detections, is_calibrated=is_calibrated)
 
         if model_version == "yolov8":
             model_title = "YOLOv8s-seg (COCO Pretrained - 50 Epochs)"
@@ -438,6 +441,7 @@ async def run_segmentation(
             "enable_dual_crop": enable_dual_crop,
             "calibration_preset": calibration_preset,
             "pixels_per_cm": pixels_per_cm,
+            "is_calibrated": is_calibrated,
             "enable_tiling": enable_tiling,
             "total_detections": len(detections),
             "counts": counts,

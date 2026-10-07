@@ -106,7 +106,22 @@ Where $a$ and $b$ are allometric scaling parameters dynamically retrieved from F
 
 ---
 
-## 6. Project Structure
+## 6. Automated BRUVs Video Survey & MaxN Ecological Tracking
+
+To address the video survey workflows of **Dr. Renato Morais**, the platform features an automated underwater video survey engine:
+* **The Double-Counting Challenge:** In continuous video surveys, the same individual fish enters and leaves the camera view repeatedly. Summing frame detections creates severe ecological overestimation.
+* **MaxN Ecological Standard:** MaxN is defined as the maximum number of individuals of a given family/species visible simultaneously in any single video frame. Because all counted fish are visible on screen at the exact same moment, double-counting is mathematically impossible.
+* **ByteTrack Multi-Object Tracking:** Combines YOLO11s-seg with ByteTrack Kalman filtering to track persistent fish identities across frames, extracting the highest-confidence crop per track for Stage 2 taxonomic classification.
+* **Temporal Sub-Sampling & Fast Inference:** Ingests video at 2–4 FPS, reducing GPU latency while retaining full tracking continuity.
+* **Interactive Research Portal:**
+  * Native web-standard H.264 video playback with live bounding boxes, segmentation masks, and tracking IDs.
+  * Temporal fish density sparkline displaying community density fluctuations across time.
+  * Clickable peak keyframe snapshot seek that jumps and pauses on the exact peak community frame.
+  * Interactive fish track cards displaying track lifespan, in-peak presence, and metric sizing.
+
+---
+
+## 7. Project Structure
 
 ```text
 Kaust Marine/
@@ -118,7 +133,8 @@ Kaust Marine/
 │   ├── taxonomic_engine.py        # Multi-model classification & adaptive gating
 │   ├── dual_crop_engine.py        # Anatomical ROI extraction & fusion
 │   ├── biomass_engine.py          # Metric sizing, FishBase allometry & Shannon H'
-│   ├── samples/                   # Benchmark validation field imagery
+│   ├── video_engine.py            # ByteTrack tracking & MaxN video processing
+│   ├── samples/                   # Benchmark validation imagery & sample Red Sea video
 │   └── static/                    # Frontend assets
 │       ├── index.html             # Responsive obsidian-slate dashboard
 │       ├── css/style.css          # Glassmorphism dark-mode styles
@@ -140,7 +156,9 @@ Kaust Marine/
     ├── train_dinov2_lora.py       # DINOv2 LoRA fine-tuning script
     ├── evaluate_dual_benchmark.py # Dual-benchmark evaluation runner
     ├── download_fish_vista_10_families.py # Fish-Vista selective downloader
-    └── download_redsea_ood_eval.py# Wild Red Sea iNaturalist downloader
+    ├── download_redsea_ood_eval.py# Wild Red Sea iNaturalist downloader
+    ├── download_sample_video.py   # Ingest sample Red Sea underwater video
+    └── process_bruvs_video.py     # Standalone CLI BRUVs video processor
 ```
 
 ---

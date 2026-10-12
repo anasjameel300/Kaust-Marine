@@ -92,7 +92,7 @@ In terrestrial object detection, classes are roughly balanced. In marine ecology
   - We upgraded directly to **Native Instance Segmentation** (`YOLO11s-seg`), generating sub-pixel polygon masks that precisely isolate the organism's silhouette.
 * **Benchmark Dataset:**
   - **Dataset Name:** **UIIS (Underwater Image Instance Segmentation) Benchmark**
-  - **Dataset Source:** [Roboflow Universe - Underwater Instance Segmentation v3i](https://universe.roboflow.com/roboflow-100/underwater-instance-segmentation)
+  - **Dataset Source:** UIIS Underwater Instance Segmentation Benchmark (Public Research Dataset)
   - **Scale:** 2,480 training images, 275 validation images formatted in COCO Segmentation.
 * **Custom Dataset Conversion & Class Pruning (`scripts/convert_coco_to_yolo.py`):**
   - Converted complex COCO segmentation polygons to normalized YOLO polygon coordinates (6-decimal precision).

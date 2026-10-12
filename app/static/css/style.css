@@ -55,6 +55,21 @@
   padding: 0;
 }
 
+sub, sup {
+  font-size: 75%;
+  line-height: 0;
+  position: relative;
+  vertical-align: baseline;
+}
+
+sub {
+  bottom: -0.2em;
+}
+
+sup {
+  top: -0.4em;
+}
+
 body.ocean-theme {
   background: var(--bg-page);
   background-image: 

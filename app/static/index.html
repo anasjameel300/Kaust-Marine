@@ -7,7 +7,7 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=Inter:wght@400;500;600&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="css/style.css?v=5">
+  <link rel="stylesheet" href="css/style.css?v=6">
 </head>
 <body class="ocean-theme">
 
@@ -212,7 +212,7 @@
               <span id="calibStatusBadge" class="mono-badge badge-amber">Uncalibrated</span>
             </div>
             <p class="calib-desc">
-              Optical scale converts pixel area to metric length ($L_{\text{cm}}$) and biomass ($W_{\text{g}}$).
+              Optical scale converts pixel area to metric length (<em>L</em><sub>cm</sub>) and biomass (<em>W</em><sub>g</sub>).
             </p>
             <div class="select-wrapper" style="margin-bottom: 8px;">
               <select id="presetSelect" class="form-select">
@@ -561,9 +561,9 @@
 
         <div class="biomass-grid">
           <div class="biomass-stat-box">
-            <span class="biomass-label">Total Biomass ($W$)</span>
+            <span class="biomass-label">Total Biomass (<em>W</em>)</span>
             <strong class="biomass-value val-cyan" id="totalBiomassVal">0.00 kg</strong>
-            <small class="biomass-subtext">Allometric $W = a \cdot L^b$</small>
+            <small class="biomass-subtext">Allometric <em>W</em> = <em>a</em> · <em>L</em><sup><em>b</em></sup></small>
           </div>
           <div class="biomass-stat-box">
             <span class="biomass-label">Commercial Catch</span>
@@ -571,7 +571,7 @@
             <small class="biomass-subtext">Food fish yield ratio</small>
           </div>
           <div class="biomass-stat-box">
-            <span class="biomass-label">Shannon Diversity ($H'$)</span>
+            <span class="biomass-label">Shannon Diversity (<em>H′</em>)</span>
             <strong class="biomass-value val-purple" id="shannonVal">0.00</strong>
             <small class="biomass-subtext">Ecological richness</small>
           </div>
@@ -708,7 +708,7 @@
 
         <p>
           <strong style="color: var(--color-fish);">Implemented Mitigation (Adaptive Anchor-Preserving Gating):</strong><br>
-          The system protects the whole organism ($P_{\text{global}}$) as the primary invariant anchor. Sub-crops only boost confidence when they corroborate the anchor class (labeled <em>Cephalic / Caudal Validated</em>). Conflicting part predictions are safely gated out to prevent confidence dilution, maintaining high verified confidence.
+          The system protects the whole organism (<em>P</em><sub>global</sub>) as the primary invariant anchor. Sub-crops only boost confidence when they corroborate the anchor class (labeled <em>Cephalic / Caudal Validated</em>). Conflicting part predictions are safely gated out to prevent confidence dilution, maintaining high verified confidence.
         </p>
 
         <p class="modal-footnote">
@@ -722,6 +722,6 @@
     </div>
   </div>
 
-  <script src="js/app.js?v=5"></script>
+  <script src="js/app.js?v=6"></script>
 </body>
 </html>

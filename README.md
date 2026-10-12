@@ -84,11 +84,10 @@ Following the *Fish-Vista* formulation (Mehrab et al., CVPR 2025), the system is
 * **Stream B1 (Cephalic ROI - Anterior 35%):** Diagnostic snout angle, eye diameter ratio, and jaw dentition (e.g. parrotfish fused beak plates).
 * **Stream B2 (Caudal Peduncle ROI - Posterior 25%):** Diagnostic caudal spine (e.g. Acanthuridae scalpel marker), peduncle depth, and fin fork geometry.
 
-### Adaptive Anchor-Preserving Gating (Option A):
-Because vision foundation models were trained on full-body organism vouchers, feeding isolated fragments (such as a severed tail fin) without whole-body context can introduce semantic ambiguity (e.g. an isolated Blue Tang tail fin resembling a blue Damselfish).
-* **The Solution:** The system preserves the whole-organism prediction ($P_{\text{global}}$) as the invariant anchor.
-* **Adaptive Reinforcement:** Agreeing sub-crops boost confidence (`Cephalic Validated`, `Anatomical Consensus`), while ambiguous or noisy part predictions are safely gated out. This prevents score dilution and avoids false unverified-specimen misfires.
-* **Scientific Transparency:** The dashboard includes an interactive eye icon (`👁`) on both the control panel and specimen cards explaining the anatomical logic to researchers.
+### Adaptive Anchor-Preserving Gating & Research Limitations:
+* **The Scientific Boundary:** Pretrained vision foundation backbones (BioCLIP, DINOv2, ResNet) were trained on full-body organism vouchers. Evaluating severed anatomical fragments (such as an isolated caudal peduncle without body context) in a zero-shot manner introduces semantic ambiguity (e.g., an isolated surgeonfish tail resembling a damselfish).
+* **Current Mitigation:** The system preserves the whole-organism prediction as the invariant anchor. Agreeing sub-regions boost confidence (`Cephalic Validated`, `Anatomical Consensus`), while ambiguous or noisy part predictions are safely gated out.
+* **Ongoing Limitation & Future Direction:** Dedicated supervised fine-tuning of region-specific anatomical classification heads (rather than evaluating general whole-body encoders on severed crops) remains an essential next research milestone for full anatomical trait resolution.
 
 ---
 
@@ -163,15 +162,15 @@ Kaust Marine/
 
 ---
 
-## 7. Quickstart & How to Run
+## 8. Quickstart & How to Run
 
 ### 1. Prerequisites
 Ensure you have Python 3.11 with CUDA support (recommended via Miniconda):
 
 ```bash
 # Clone the repository
-git clone https://github.com/your-username/kaust-marine-vision.git
-cd "kaust-marine-vision"
+git clone https://github.com/anasjameel300/Kaust-Marine.git
+cd "Kaust-Marine"
 
 # Activate the conda environment
 conda activate kaust_marine
